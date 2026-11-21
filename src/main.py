@@ -3,6 +3,7 @@
 import argparse
 import json
 import math
+import sys
 from pathlib import Path
 
 from .scheduler import Scheduler
@@ -13,7 +14,7 @@ def main():
     parser.add_argument("--data", type=Path, default=Path("/data"))
     parser.add_argument("--source", type=Path, default=Path("/opt/sqlglot"))
     parser.add_argument("--artifacts", type=Path, default=Path(__file__).resolve().parents[1] / "artifacts")
-    parser.add_argument("--mode", choices=("all", "file", "block", "line", "hybrid"), default="all")
+    parser.add_argument("--mode", choices=("all", "file", "block", "line", "hybrid", "verified"), default="hybrid")
     parser.add_argument("--refine", action="store_true")
     parser.add_argument("--explain", action="store_true")
     args = parser.parse_args()
@@ -25,6 +26,8 @@ def main():
         from .selector import Selector
         selector = Selector(tests, args.source, args.artifacts, args.mode, args.explain)
     for patch in sorted((args.data / "commits").glob("*.patch")):
+        if args.explain:
+            print(f"{patch.name} ({args.mode})", file=sys.stderr)
         selected = durations.keys()
         if selector is not None:
             try:

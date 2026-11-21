@@ -61,7 +61,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--kit", required=True, type=Path, help="extracted official starter")
     parser.add_argument("--source", type=Path, default=Path("/opt/sqlglot"))
-    parser.add_argument("--mode", choices=("starter", "all", "file", "block", "line", "hybrid"), default="hybrid")
+    parser.add_argument("--artifacts", type=Path, help="override dependency maps for native comparisons")
+    parser.add_argument("--mode", choices=("starter", "all", "file", "block", "line", "hybrid", "verified"), default="hybrid")
     parser.add_argument("--image", help="profile a built image on Linux (requires cgroup v2)")
     parser.add_argument("--refine", action="store_true")
     parser.add_argument("--save", required=True, type=Path, help="directory outside the submission for results")
@@ -73,6 +74,8 @@ def main():
     if opts.runs < 1:
         parser.error("--runs must be positive")
     if opts.image:
+        if opts.artifacts:
+            parser.error("--artifacts applies only to native runs")
         cmd = docker_command(opts.image, data, opts.mode == "starter", opts.mode, opts.refine)
     elif opts.mode == "starter":
         # Execute the original Python file, remapping only its /data mount.
@@ -82,6 +85,8 @@ def main():
     else:
         cmd = [sys.executable, "-B", "-m", "src.main", "--data", str(data),
                "--source", str(opts.source.resolve()), "--mode", opts.mode]
+        if opts.artifacts:
+            cmd.extend(("--artifacts", str(opts.artifacts.resolve())))
         if opts.refine:
             cmd.append("--refine")
     spec = importlib.util.spec_from_file_location("official_score", kit / "score.py")

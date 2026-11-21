@@ -1,0 +1,84 @@
+{
+  "base": "eb11aec4be8cb2122afe713a4816662c3f0fb2fa",
+  "files": [
+    "tests/test_docs.py",
+    "tests/test_typing.py"
+  ],
+  "shared_producers": {
+    "sqlglot/__init__.py": [
+      "parse_one"
+    ],
+    "sqlglot/dialects/dialect.py": [
+      "Dialect.get_or_raise",
+      "_Dialect.__new__",
+      "_Dialect.__new__.get_start_end",
+      "_Dialect._try_load",
+      "_with_strict_time_inverse"
+    ],
+    "sqlglot/expressions/core.py": [
+      "Expr.__init_subclass__"
+    ],
+    "sqlglot/generator.py": [
+      "Generator.__init__",
+      "_build_dispatch"
+    ],
+    "sqlglot/helper.py": [
+      "name_sequence",
+      "seq_get",
+      "suggest_closest_match_and_fail",
+      "to_bool"
+    ],
+    "sqlglot/tokens.py": [
+      "_TokenizerBase.__init_subclass__",
+      "_convert_quotes",
+      "_quotes_to_format"
+    ],
+    "sqlglot/trie.py": [
+      "new_trie"
+    ],
+    "tests/dialects/test_dialect.py": [
+      "TestDialect.test_patch_dialect_parser"
+    ],
+    "tests/helpers.py": [
+      "_extract_meta",
+      "_filter_comments",
+      "is_compiled",
+      "load_sql_fixture_pairs"
+    ],
+    "tests/leakcheck.py": [
+      "_make_workload",
+      "_maxrss_kb",
+      "_print_report",
+      "_slope",
+      "_snapshot",
+      "check_leaks",
+      "main"
+    ],
+    "tests/test_dialect_entry_points.py": [
+      "TestDialectEntryPoints.setUp",
+      "TestDialectEntryPoints.tearDown"
+    ],
+    "tests/test_dialect_imports.py": [
+      "TestDialectImports.test_dialect_attribute_access_is_cached"
+    ],
+    "tests/test_executor.py": [
+      "TestExecutor.setUpClass",
+      "TestExecutor.setUpClass.setup",
+      "initializer",
+      "open_file"
+    ],
+    "tests/test_generator.py": [
+      "TestGenerator.test_fallback_function_sql",
+      "TestGenerator.test_fallback_function_var_args_sql"
+    ],
+    "tests/test_lineage.py": [
+      "TestLineage.setUpClass"
+    ],
+    "tests/test_optimizer.py": [
+      "TestOptimizer.setUpClass"
+    ],
+    "tests/test_sqlglotc.py": [
+      "TestSQLGlotC.setUpClass"
+    ]
+  }
+}
