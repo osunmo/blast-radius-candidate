@@ -1,0 +1,6 @@
+*
+!src/
+!src/**
+!artifacts/
+!artifacts/**
+**/__pycache__/
