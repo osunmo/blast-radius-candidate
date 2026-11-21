@@ -52,7 +52,9 @@ def docker_command(image, data, starter, mode, refine):
         "--security-opt", "no-new-privileges", "--user", "65534:65534", "-e", "HOME=/tmp",
         "-v", f"{data / 'tests.json'}:/data/tests.json:ro",
         "-v", f"{data / 'commits'}:/data/commits:ro", image, "sh", "-ec",
-        '"$@"; cat /sys/fs/cgroup/cpu.stat /sys/fs/cgroup/memory.peak /sys/fs/cgroup/pids.peak >&2',
+        'read begin idle < /proc/uptime; "$@"; read end idle < /proc/uptime; '
+        'printf "selector_window %s %s\\n" "$begin" "$end" >&2; '
+        'cat /sys/fs/cgroup/cpu.stat /sys/fs/cgroup/memory.peak /sys/fs/cgroup/pids.peak >&2',
         "profile", *args,
     ]
 
@@ -62,7 +64,7 @@ def main():
     parser.add_argument("--kit", required=True, type=Path, help="extracted official starter")
     parser.add_argument("--source", type=Path, default=Path("/opt/sqlglot"))
     parser.add_argument("--artifacts", type=Path, help="override dependency maps for native comparisons")
-    parser.add_argument("--mode", choices=("starter", "all", "file", "block", "line", "hybrid", "verified"), default="hybrid")
+    parser.add_argument("--mode", choices=("starter", "all", "file", "block", "line", "hybrid", "verified", "indexed"), default="hybrid")
     parser.add_argument("--image", help="profile a built image on Linux (requires cgroup v2)")
     parser.add_argument("--refine", action="store_true")
     parser.add_argument("--save", required=True, type=Path, help="directory outside the submission for results")
@@ -95,13 +97,15 @@ def main():
     reports = []
     for run in range(1, opts.runs + 1):
         output, diagnostics, cpu, wall = measure_host(cmd)
-        peak_bytes = peak_pids = None
+        peak_bytes = peak_pids = runtime_wall = None
         if opts.image:
             stats = re.search(rb"(?m)^usage_usec (\d+)\r?$", diagnostics)
             if not stats:
                 raise RuntimeError("missing cgroup CPU counter")
             cpu = int(stats[1]) / 1_000_000
             peak_bytes, peak_pids = map(int, diagnostics.splitlines()[-2:])
+            interval = re.search(rb"(?m)^selector_window ([\d.]+) ([\d.]+)\r?$", diagnostics)
+            runtime_wall = round(float(interval[2]) - float(interval[1]), 2)
         # No label-derived input is provided to the child process.
         tests = json.loads((data / "tests.json").read_bytes())["tests"]
         answers = json.loads((data / "answers.json").read_bytes())["commits"]
@@ -123,7 +127,8 @@ def main():
         simulated = scored["simulated_milliseconds"] / 1000
         report = dict(run=run, simulated=simulated, cpu=cpu, total=simulated + cpu, wall=wall,
                       missed=scored["missed_commits"], selected=selected, hits=hits, failures=failures,
-                      commits=len(rows), bytes=len(output), peak_bytes=peak_bytes, peak_pids=peak_pids)
+                      commits=len(rows), bytes=len(output), peak_bytes=peak_bytes, peak_pids=peak_pids,
+                      selector_wall=runtime_wall)
         reports.append(report)
         print(json.dumps(report), flush=True)
         (opts.save / f"run-{run}.jsonl").write_bytes(output)

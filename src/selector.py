@@ -2,6 +2,7 @@
 
 import ast
 import gzip
+import hashlib
 import json
 import marshal
 import re
@@ -28,14 +29,24 @@ DIRECTIVE = re.compile(r"#\s*(?:!|type\s*:|pragma\b|noqa\b|fmt\s*:|mypy\s*:|ruff
 @dataclass
 class Body:
     name: tuple[str, ...]
-    node: ast.AST
+    node: ast.AST | None
     start: int  # inclusive, one-based
     end: int    # inclusive, one-based
+    saved_metadata: tuple | None = None
 
     def contains(self, start, end):
         if start == end:
             return self.start - 1 <= start <= self.end
         return self.start <= start + 1 and end <= self.end
+
+    def metadata(self):
+        if self.saved_metadata is not None:
+            return self.saved_metadata
+        guarded = {"fixture", "lru_cache", "cache", "cached_property"}
+        protected = any(isinstance(n, ast.Name) and n.id in guarded
+                        or isinstance(n, ast.Attribute) and n.attr in guarded
+                        for dec in self.node.decorator_list for n in ast.walk(dec))
+        return protected, ast.get_docstring(self.node, clean=False)
 
 
 class SourceIndex:
@@ -78,6 +89,9 @@ class SourceIndex:
                 return body
         return None
 
+    def signature(self, lineno):
+        return statement_signature(self.simple.get(lineno))
+
     def writes_shared_state(self, body, start, end):
         if start == end:
             return False
@@ -105,33 +119,65 @@ def matching_bodies(old, new, edit):
         raise Unsupported("definition added, removed, renamed or ambiguous")
     if name[-1] in SHARED_SETUP:
         raise Unsupported("shared setup or test discovery")
-    for body in (before, after):
-        if any(isinstance(n, ast.Name) and n.id in {"fixture", "lru_cache", "cache", "cached_property"}
-               or isinstance(n, ast.Attribute) and n.attr in {"fixture", "lru_cache", "cache", "cached_property"}
-               for dec in body.node.decorator_list for n in ast.walk(dec)):
-            raise Unsupported("shared fixture or memoized body")
-    if ast.get_docstring(before.node, clean=False) != ast.get_docstring(after.node, clean=False):
+    old_guard, old_doc = before.metadata()
+    new_guard, new_doc = after.metadata()
+    if old_guard or new_guard:
+        raise Unsupported("shared fixture or memoized body")
+    if old_doc != new_doc:
         raise Unsupported("function metadata changed")
     return before, after
+
+
+def statement_signature(node):
+    if node is None:
+        return None
+    # New bindings can change the interpretation of another line before
+    # the edited statement runs. Comprehensions and lambdas have separate scopes.
+    nested = (ast.NamedExpr, ast.Lambda, ast.comprehension, ast.Yield, ast.YieldFrom, ast.Await)
+    if any(isinstance(n, nested) for n in ast.walk(node)):
+        return None
+    signature = [type(node).__name__, node.col_offset]
+    if isinstance(node, ast.Assign):
+        signature.extend(ast.dump(x) for x in node.targets)
+    if isinstance(node, ast.AugAssign):
+        signature.append(ast.dump(node.target))
+    return signature
 
 
 def single_line_change(old, new, edit):
     if edit.old_end - edit.old_start != 1 or edit.new_end - edit.new_start != 1:
         return False
-    a = old.simple.get(edit.old_end)
-    b = new.simple.get(edit.new_end)
-    if a is None or type(a) is not type(b) or a.col_offset != b.col_offset:
-        return False
-    # New bindings can change the interpretation of another line before
-    # the edited statement runs. Comprehensions and lambdas have separate scopes.
-    nested = (ast.NamedExpr, ast.Lambda, ast.comprehension, ast.Yield, ast.YieldFrom, ast.Await)
-    if any(isinstance(n, nested) for stmt in (a, b) for n in ast.walk(stmt)):
-        return False
-    if isinstance(a, ast.Assign):
-        return [ast.dump(x) for x in a.targets] == [ast.dump(x) for x in b.targets]
-    if isinstance(a, ast.AugAssign):
-        return ast.dump(a.target) == ast.dump(b.target)
-    return True
+    a = old.signature(edit.old_end)
+    return a is not None and a == new.signature(edit.new_end)
+
+
+def pack_scopes(source, path):
+    index = SourceIndex(source, path)
+    return {
+        "sha256": hashlib.sha256(source.encode("utf-8")).hexdigest(),
+        "bodies": [[".".join(b.name), b.start, b.end, *b.metadata()] for b in index.bodies],
+        "simple": {str(line): sig for line in index.simple if (sig := index.signature(line)) is not None},
+    }
+
+
+class SavedIndex:
+    owner = SourceIndex.owner
+
+    def __init__(self, source, entry):
+        if hashlib.sha256(source.encode("utf-8")).hexdigest() != entry["sha256"]:
+            raise Unsupported("pinned source digest differs from scope index")
+        self.lines = source.split("\n")
+        self.simple = entry["simple"]
+        self.bodies = []
+        self.by_name = {}
+        for qualified, start, end, guarded, doc in entry["bodies"]:
+            name = tuple(qualified.split("."))
+            body = Body(name, None, start, end, (guarded, doc))
+            self.bodies.append(body)
+            self.by_name[name] = None if name in self.by_name else body
+
+    def signature(self, lineno):
+        return self.simple.get(str(lineno))
 
 
 def compile_bytes(text, path):
@@ -156,9 +202,10 @@ def text_candidate(old, new, edits):
 
 class Selector:
     def __init__(self, tests, source_root, artifact_dir, mode="hybrid", explain=False):
-        if mode not in {"all", "file", "block", "line", "hybrid", "verified"}:
+        if mode not in {"all", "file", "block", "line", "hybrid", "verified", "indexed"}:
             raise ValueError(f"unknown selector mode {mode!r}")
-        self.mode = mode
+        self.mode = "hybrid" if mode == "indexed" else mode
+        self.scopes = {}
         self.explain = explain
         self.root = Path(source_root).resolve()
         self.tests = sorted(tests, key=lambda row: row["number"])
@@ -182,7 +229,7 @@ class Selector:
                 raise Unsupported("coverage collection incomplete")
             self.always = self.bits(data.get("always_include", "0"))
             self.fixture_bits = {path: self.bits(bits) for path, bits in data["fixtures"].items()}
-            if mode in {"hybrid", "verified"}:
+            if self.mode in {"hybrid", "verified"}:
                 index_file = Path(artifact_dir) / "observers.json"
                 if index_file.is_file():
                     index = json.loads(index_file.read_text(encoding="utf-8"))
@@ -194,6 +241,17 @@ class Selector:
                     observers = set(reflective_modules(self.root))
                     self.shared = shared_producers(self.root)
                 self.observers = sum(1 << t["number"] for t in self.tests if t["file"] in observers)
+            if mode == "indexed":
+                with gzip.open(Path(artifact_dir) / "scopes.json.gz", "rt", encoding="utf-8") as f:
+                    index = json.load(f)
+                if index["base"] != BASE or index["version"] != 1:
+                    raise Unsupported("invalid scope index version or base commit")
+                # A different parser can assign different source positions.
+                # Rebuild ordinary hybrid ASTs locally in that case.
+                if index.get("python_tag") == sys.implementation.cache_tag:
+                    self.scopes = index["files"]
+                elif self.explain:
+                    print("scope index interpreter differs; using runtime ASTs", file=sys.stderr)
             self.coverage = data["files"]
         except (ValueError, TypeError, KeyError, AttributeError, OSError, EOFError, SyntaxError, ImportError) as exc:
             self.error = str(exc)
@@ -219,6 +277,8 @@ class Selector:
 
     @lru_cache(maxsize=40)
     def index(self, path):
+        if path in self.scopes:
+            return SavedIndex(self.source(path), self.scopes[path])
         return SourceIndex(self.source(path), path)
 
     @lru_cache(maxsize=24)
@@ -276,8 +336,32 @@ class Selector:
                     print(f"{path}: identical compiled code and source positions", file=sys.stderr)
                 return mask
         old = self.index(path)
-        new = SourceIndex(updated, path, validate=True)
         lines, initial = self.lines(path)
+        if isinstance(old, SavedIndex):
+            if mask | self.always == self.mask:
+                return self.mask
+            for edit in edits:
+                body = old.owner(edit.old_start, edit.old_end)
+                if body is None:
+                    raise Unsupported("old range outside function bodies")
+                if edit.old_start == edit.old_end:
+                    # Several functions can share an insertion boundary.
+                    # New coordinates disambiguate them in matching_bodies.
+                    continue
+                if old.by_name[body.name] is None or body.name[-1] in SHARED_SETUP or body.metadata()[0]:
+                    raise Unsupported("ambiguous, shared setup or memoized function")
+                if ".".join(body.name) in self.shared.get(path, ()):
+                    raise Unsupported("producer of shared state or one of its helpers")
+                # Even an eligible narrow replacement cannot avoid its old
+                # executed line. All other edits use the entire old body.
+                if (edit.old_end - edit.old_start == edit.new_end - edit.new_start == 1
+                        and edit.old_end in lines and old.signature(edit.old_end) is not None):
+                    start, end = edit.old_end, edit.old_end
+                else:
+                    start, end = body.start, body.end
+                if any(start <= n <= end for n in initial):
+                    raise Unsupported("also executed outside attributed tests")
+        new = SourceIndex(updated, path, validate=True)
         for edit in edits:
             before, after = matching_bodies(old, new, edit)
             if ".".join(before.name) in self.shared.get(path, ()):

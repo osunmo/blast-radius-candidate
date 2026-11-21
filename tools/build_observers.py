@@ -12,17 +12,22 @@ from src.selector import BASE
 from src.shared import shared_producers
 
 
+def pinned_checkout(path):
+    source = path.resolve()
+    git = ["git", "-c", f"safe.directory={source.as_posix()}", "-C", str(source)]
+    if subprocess.check_output(git + ["rev-parse", "HEAD"], text=True).strip() != BASE:
+        raise ValueError("source must be the pinned SQLGlot commit")
+    if subprocess.check_output(git + ["status", "--porcelain"], text=True).strip():
+        raise ValueError("source must be a clean checkout")
+    return source
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("source", type=Path)
     parser.add_argument("artifacts", type=Path)
     args = parser.parse_args()
-    source = args.source.resolve()
-    git = ["git", "-c", f"safe.directory={source.as_posix()}", "-C", str(source)]
-    if subprocess.check_output(git + ["rev-parse", "HEAD"], text=True).strip() != BASE:
-        parser.error("source must be the pinned SQLGlot commit")
-    if subprocess.check_output(git + ["status", "--porcelain"], text=True).strip():
-        parser.error("source must be a clean checkout")
+    source = pinned_checkout(args.source)
     args.artifacts.mkdir(parents=True, exist_ok=True)
     files = reflective_modules(source)
     shared = shared_producers(source)

@@ -26,7 +26,7 @@ TOOL = MON.COVERAGE_ID
 
 
 class Collector:
-    def __init__(self, source, ids):
+    def __init__(self, source, ids, explain_processes=False):
         self.root = os.path.normcase(str(source)) + os.sep
         self.ids = ids
         self.all = (1 << len(ids)) - 1
@@ -39,6 +39,7 @@ class Collector:
         self.nonpassing = set()
         self.opaque = 0
         self.global_process_events = set()
+        self.explain_processes = explain_processes
         self.collection_errors = 0
         self.collected = set()
         self.class_groups = collections.defaultdict(int)
@@ -89,7 +90,7 @@ class Collector:
         if event in ("subprocess.Popen", "os.fork", "os.forkpty", "os.posix_spawn",
                      "os.system", "os.exec", "_winapi.CreateProcess", "_posixsubprocess.fork_exec"):
             self.opaque |= self.group or self.all
-            if not self.group:
+            if not self.group or self.explain_processes:
                 frame = sys._getframe(1)
                 callers = []
                 while frame is not None and len(callers) < 8:
@@ -188,22 +189,24 @@ def compact(value):
 
 def report_encoding(files):
     """Measure the line matrix alone, streaming both encodings into DEFLATE."""
+    @functools.lru_cache(maxsize=2048)
+    def id_list(mask):
+        bits = int(mask, 16)
+        numbers = []
+        while bits:
+            first = bits & -bits
+            numbers.append(first.bit_length() - 1)
+            bits ^= first
+        return compact(numbers)
+
     totals = []
     for lists in (False, True):
         comp = zlib.compressobj(6)
         plain_size = compressed = 0
         for path, file in sorted(files.items()):
             for line, mask in file["lines"].items():
-                if lists:
-                    bits = int(mask, 16)
-                    ids = []
-                    while bits:
-                        first = bits & -bits
-                        ids.append(first.bit_length() - 1)
-                        bits ^= first
-                    row = compact([path, line, ids])
-                else:
-                    row = compact([path, line, mask])
+                prefix = compact([path, line])[:-1] + b","
+                row = prefix + (id_list(mask) if lists else compact(mask)) + b"]"
                 plain_size += len(row)
                 compressed += len(comp.compress(row))
         totals.append({"raw_bytes": plain_size, "deflate_bytes": compressed + len(comp.flush())})

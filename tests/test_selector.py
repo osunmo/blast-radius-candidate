@@ -3,6 +3,7 @@ from contextlib import redirect_stderr, redirect_stdout
 import gzip
 import json
 import io
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -166,6 +167,27 @@ def acquire(key):
         self.assertEqual(out.getvalue(), "")
         self.assertIn("executed line 5", err.getvalue())
         self.assertIn(PATH, err.getvalue())
+
+    def test_indexed_hybrid_parity_and_source_provenance(self):
+        from src.selector import pack_scopes
+        packed = {"base": BASE, "version": 1, "python_tag": sys.implementation.cache_tag,
+                  "files": {PATH: pack_scopes(SOURCE, PATH)}}
+        with gzip.open(self.root / "scopes.json.gz", "wt", encoding="utf-8") as handle:
+            json.dump(packed, handle)
+        hybrid, indexed = self.selector(), self.selector("indexed")
+        for source in (SOURCE.replace("10", "100"), SOURCE.replace("return 10", "x += 5\n        return x"),
+                       "# heading\n" + SOURCE, SOURCE.replace("other():", "other(x):"),
+                       SOURCE.replace("return 10", "continue"), SOURCE.replace("return 30", "yield 30")):
+            patch = diff(SOURCE, source, n=0)
+            self.assertEqual(indexed.select(patch), hybrid.select(patch))
+        self.put(PATH, SOURCE + "# mismatched checkout\n")
+        indexed = self.selector("indexed")
+        self.assertEqual(indexed.select(diff(SOURCE, SOURCE.replace("10", "100"))), set(range(5)))
+        packed["python_tag"] = "different-interpreter"
+        with gzip.open(self.root / "scopes.json.gz", "wt", encoding="utf-8") as handle:
+            json.dump(packed, handle)
+        indexed = self.selector("indexed")
+        self.assertEqual(indexed.select(diff(SOURCE, SOURCE.replace("10", "100"))), {0})
 
     def test_mismatched_catalog_and_missing_coverage_expand(self):
         change = diff(SOURCE, SOURCE.replace("return 10", "return 1"))
