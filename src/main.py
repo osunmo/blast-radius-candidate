@@ -16,7 +16,7 @@ def main():
     parser.add_argument("--data", type=Path, default=Path("/data"))
     parser.add_argument("--source", type=Path, default=Path("/opt/sqlglot"))
     parser.add_argument("--artifacts", type=Path, default=Path(__file__).resolve().parents[1] / "artifacts")
-    parser.add_argument("--mode", choices=("all", "file", "block", "line", "hybrid", "verified", "indexed"), default="hybrid")
+    parser.add_argument("--mode", choices=("all", "file", "block", "line", "hybrid", "verified", "indexed", "fine"), default="fine")
     parser.add_argument("--refine", action="store_true")
     parser.add_argument("--explain", action="store_true")
     args = parser.parse_args()

@@ -45,6 +45,7 @@ class Collector:
         self.class_groups = collections.defaultdict(int)
         self.file_groups = collections.defaultdict(int)
         self.active = True
+        self.read_callers = {}
 
     @functools.cache
     def relative(self, absolute):
@@ -68,7 +69,7 @@ class Collector:
         if line <= 0:  # CPython's synthetic resume position for empty modules
             return MON.DISABLE
         path = self.relative(code.co_filename)
-        if self.group:
+        if self.group and code.co_flags & 1:
             dest = self.observed[path]
             dest[line] = dest.get(line, 0) | self.group
         # A class or module body may be evaluated just once, under a test
@@ -108,10 +109,22 @@ class Collector:
         # Bytecode/source opens by the import system represent code loading,
         # not user-level reads of the program's text. These have a separate
         # signal in the contextless line map.
-        caller = sys._getframe(1).f_code.co_filename
+        frame = sys._getframe(1)
+        while frame and frame.f_code.co_name == 'audit' and isinstance(frame.f_locals.get('self'), Collector):
+            frame = frame.f_back
+        caller = frame.f_code.co_filename if frame else ''
         if path.endswith(".py") and caller.startswith("<frozen importlib"):
             return
         self.reads[path] |= self.group or self.all
+        if path.endswith('.py') and path not in self.read_callers:
+            frame = sys._getframe(1)
+            callers = []
+            for _ in range(5):
+                if frame is None:
+                    break
+                callers.append(frame.f_code.co_filename + ':' + frame.f_code.co_name)
+                frame = frame.f_back
+            self.read_callers[path] = callers
 
     def switch(self, group):
         self.group = group

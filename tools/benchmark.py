@@ -64,7 +64,7 @@ def main():
     parser.add_argument("--kit", required=True, type=Path, help="extracted official starter")
     parser.add_argument("--source", type=Path, default=Path("/opt/sqlglot"))
     parser.add_argument("--artifacts", type=Path, help="override dependency maps for native comparisons")
-    parser.add_argument("--mode", choices=("starter", "all", "file", "block", "line", "hybrid", "verified", "indexed"), default="hybrid")
+    parser.add_argument("--mode", choices=("starter", "all", "file", "block", "line", "hybrid", "verified", "indexed", "fine"), default="hybrid")
     parser.add_argument("--image", help="profile a built image on Linux (requires cgroup v2)")
     parser.add_argument("--refine", action="store_true")
     parser.add_argument("--save", required=True, type=Path, help="directory outside the submission for results")

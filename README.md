@@ -8,7 +8,7 @@ Use Docker with BuildKit. Set `KIT` to an absolute path containing the extracted
 
 ```sh
 docker build --platform linux/amd64 -t blast-radius-local .
-python tools/benchmark.py --kit "$KIT" --image blast-radius-local --mode hybrid --save ../sample-results
+python tools/benchmark.py --kit "$KIT" --image blast-radius-local --mode fine --save ../sample-results
 python -m unittest discover -s tests
 ```
 
@@ -22,6 +22,10 @@ python "$KIT/score.py" "$KIT/sample" "$KIT/sample/answers.json" ../predictions.j
 ```
 
 ## How selection works
+
+The additional `fine` mode isolates existing lambda bodies, checks source readers and metadata observers for AST-preserving text changes, and indexes reads of existing literal class settings. It retains the full-suite fallback when initialization consumers or dynamic lookups cannot be attributed. AST equality alone does not prove that source positions are unobservable. The source-reader and metadata-observer maps are part of this decision, and unobserved reflective behavior remains a limitation.
+
+The worker profiler distinguishes loader source opens from program source reads through audit-hook wrappers. It records actual optimized function execution separately from module and class initialization, and retains exact parent fixture contexts while unioning shared worker lifetime dependencies. Run `python3.13 tools/test_audit.py` in the profiling environment to verify the audit-hook regression. Rebuild the static setting-read index with `python tools/build_settings.py "$SCRATCH/sqlglot" artifacts`.
 
 1. The profiler matches pytest items to whole catalog node IDs. It tracks lines across setup, call and teardown, broadens shared fixture contexts, records contextless execution separately, and audits reads of baseline fixture and source files. Each source line stores its test set as an integer bitset. The gzip-compressed map loads once per batch.
 2. At inference, the selector checks the pinned map and ordered catalog, validates hunk counts, coordinates and context, and reconstructs changed source in memory. It parses baseline and patched syntax and compiles changed Python without importing it. A supported local edit can select tests associated with an old statement or enclosing function. Added statements use the enclosing scope. Fixture edits use observed readers when available.

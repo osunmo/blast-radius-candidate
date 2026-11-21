@@ -4,7 +4,7 @@
     "tests/dialects/test_sqlite.py::TestSQLite::test_variadic_iif_execution"
   ],
   "always_include_count": 1,
-  "attributed_lines": 96654,
+  "attributed_lines": 79762,
   "base": "eb11aec4be8cb2122afe713a4816662c3f0fb2fa",
   "catalog": 1620,
   "catalog_collected": 1620,
@@ -94,25 +94,25 @@
   "elapsed_seconds": 2210.543,
   "files_with_coverage": 243,
   "global_lines": 27239,
-  "gzip_bytes": 743571,
+  "gzip_bytes": 624473,
   "import_sweep": {
     "import_errors": [],
     "modules": 183,
     "opaque": false
   },
-  "json_bytes": 25600205,
+  "json_bytes": 17966993,
   "line_matrix_encoding_comparison": {
     "hex_bitsets": {
-      "deflate_bytes": 671715,
-      "raw_bytes": 28224561
+      "deflate_bytes": 561740,
+      "raw_bytes": 20142732
     },
     "integer_lists": {
-      "deflate_bytes": 768625,
-      "raw_bytes": 18639524
+      "deflate_bytes": 695837,
+      "raw_bytes": 15581319
     }
   },
   "map_format": 1,
-  "map_sha256": "69dbcdf46560a5ce5362d7583526a9661782562892dc3ee02846df753acb80c8",
+  "map_sha256": "59a6f80f1aa3ab2bf33f11bb072afbb0ba5b95d9390dbf0206e153b01416762d",
   "nonpassing_or_missing_phase": [],
   "opaque_child_process": [
     "tests/dialects/test_dialect.py::TestDialect::test_lazy_load",
@@ -196,7 +196,8 @@
     }
   ],
   "python": "3.13.18 (main, Nov  5 2026, 07:59:38) [GCC 14.2.0]",
-  "recorded_reads": 274,
+  "read_callers": {},
+  "recorded_reads": 143,
   "shared_pool_workloads_matched": 1,
   "sqlite": "3.46.1",
   "unattributed_process_events": [],

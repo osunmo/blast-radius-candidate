@@ -49,6 +49,7 @@ def trace_child():
             "lines": {p: sorted(lines) for p, lines in tracker.observed.items()},
             "global": {p: sorted(lines) for p, lines in tracker.contextless.items()},
             "reads": sorted(tracker.reads),
+            "read_callers": tracker.read_callers,
         }
         target.write_bytes(gzip.compress(compact(result), compresslevel=1, mtime=0))
 
@@ -303,6 +304,7 @@ def gather(args):
                     rejected.append({"items": sorted(names), "reason": "worker did not observe the baseline package"})
                     break
                 records.append(record)
+                manifest.setdefault('read_callers', {}).update(record.get('read_callers', {}))
             if len(records) != len(expected):
                 replay.foreign |= bit
             else:
@@ -318,6 +320,21 @@ def gather(args):
         for names, bit, records in valid:
             if bit & replay.foreign:
                 continue
+            # Replace successful replay consumers' old records, which included
+            # module initialization executed while importing their workers.
+            for file in payload["files"].values():
+                for line, original in list(file["lines"].items()):
+                    remaining = int(original, 16) & ~bit
+                    if remaining:
+                        file["lines"][line] = format(remaining, "x")
+                    else:
+                        del file["lines"][line]
+            for path, original in list(payload["fixtures"].items()):
+                remaining = int(original, 16) & ~bit
+                if remaining:
+                    payload["fixtures"][path] = format(remaining, "x")
+                else:
+                    del payload["fixtures"][path]
             if len(names) > 1:
                 for file in payload["files"].values():
                     for line, original_bits in file["lines"].items():
@@ -329,7 +346,14 @@ def gather(args):
                     if original & bit:
                         payload["fixtures"][path] = format(original | bit, "x")
             parent = {"lines": {p: [k for k,v in d.items() if v & bit] for p,d in replay.observed.items()},
-                      "global": replay.contextless, "reads": [p for p,v in replay.reads.items() if v & bit]}
+                      "global": replay.contextless, "reads": []}
+            # Parent-side fixture reads retain their test context. Only the
+            # worker's lifetime dependencies belong to every pool submitter.
+            for path, readers in replay.reads.items():
+                readers &= bit
+                if readers:
+                    previous = int(payload['fixtures'].get(path, '0'), 16)
+                    payload['fixtures'][path] = format(previous | readers, 'x')
             merge_child(payload, [parent, *records], bit)
             for name in names:
                 resolved[name] = resolved.get(name, 0) + len(records)

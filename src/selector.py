@@ -12,6 +12,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from .diff import Change, Unsupported, parse_patch
+from .fine import lambda_selection, changed_setting, setting_consumers
 from .observers import reflective_modules
 from .shared import bindings, class_receiver, local_nodes, mutation_owner, shared_producers
 
@@ -202,7 +203,7 @@ def text_candidate(old, new, edits):
 
 class Selector:
     def __init__(self, tests, source_root, artifact_dir, mode="hybrid", explain=False):
-        if mode not in {"all", "file", "block", "line", "hybrid", "verified", "indexed"}:
+        if mode not in {"all", "file", "block", "line", "hybrid", "verified", "indexed", "fine"}:
             raise ValueError(f"unknown selector mode {mode!r}")
         self.mode = "hybrid" if mode == "indexed" else mode
         self.scopes = {}
@@ -215,6 +216,7 @@ class Selector:
         self.always = 0
         self.observers = 0
         self.shared = {}
+        self.setting_reads = None
         self.error = "all-tests baseline"
         if mode == "all":
             return
@@ -229,7 +231,7 @@ class Selector:
                 raise Unsupported("coverage collection incomplete")
             self.always = self.bits(data.get("always_include", "0"))
             self.fixture_bits = {path: self.bits(bits) for path, bits in data["fixtures"].items()}
-            if self.mode in {"hybrid", "verified"}:
+            if self.mode in {"hybrid", "verified", "fine"}:
                 index_file = Path(artifact_dir) / "observers.json"
                 if index_file.is_file():
                     index = json.loads(index_file.read_text(encoding="utf-8"))
@@ -253,6 +255,13 @@ class Selector:
                 elif self.explain:
                     print("scope index interpreter differs; using runtime ASTs", file=sys.stderr)
             self.coverage = data["files"]
+            settings = Path(artifact_dir) / 'settings.json.gz'
+            if self.mode == 'fine' and settings.is_file():
+                with gzip.open(settings, 'rt', encoding='utf-8') as f:
+                    index = json.load(f)
+                if index['base'] != BASE:
+                    raise Unsupported('settings index revision mismatch')
+                self.setting_reads = index['reads']
         except (ValueError, TypeError, KeyError, AttributeError, OSError, EOFError, SyntaxError, ImportError) as exc:
             self.error = str(exc)
 
@@ -314,7 +323,7 @@ class Selector:
         readers = self.fixture_bits.get(path, 0)
         if not path.endswith(".py"):
             # Configuration and discovery may be read before any item exists.
-            if self.mode in {"hybrid", "verified"} and path.startswith("tests/fixtures/") and readers:
+            if self.mode in {"hybrid", "verified", "fine"} and path.startswith("tests/fixtures/") and readers:
                 if self.explain:
                     print(f"{path}: {readers.bit_count()} observed fixture readers", file=sys.stderr)
                 return readers
@@ -327,6 +336,19 @@ class Selector:
                 if cookie and cookie[1].lower().replace("_", "-") not in {"utf-8", "utf8"}:
                     raise Unsupported("non-UTF-8 source declaration")
         mask = readers | self.observers
+        if self.mode == "fine":
+            compile(updated, path, "exec", dont_inherit=True)
+            if ast.dump(ast.parse(source)) == ast.dump(ast.parse(updated)):
+                return mask
+            attributed, _ = self.lines(path)
+            expression = lambda_selection(source, updated, attributed)
+            if expression is not None:
+                return mask | expression
+            names = changed_setting(source, updated)
+            if names:
+                consumers = setting_consumers(self.root, self.coverage, names, self.setting_reads)
+                if consumers is not None:
+                    return mask | consumers
         if self.explain and mask:
             print(f"{path}: {readers.bit_count()} source readers, "
                   f"{self.observers.bit_count()} metadata observers", file=sys.stderr)
@@ -371,7 +393,7 @@ class Selector:
             changed_lines = old.lines[edit.old_start:edit.old_end] + new.lines[edit.new_start:edit.new_end]
             if any(REFLECTIVE.search(line) for line in changed_lines):
                 raise Unsupported("generator, scope or reflective metadata changed")
-            narrow = (self.mode in {"line", "hybrid", "verified"} and single_line_change(old, new, edit)
+            narrow = (self.mode in {"line", "hybrid", "verified", "fine"} and single_line_change(old, new, edit)
                       and edit.old_end in lines)
             start, end = (edit.old_end, edit.old_end) if narrow else (before.start, before.end)
             if any(start <= n <= end for n in initial):
