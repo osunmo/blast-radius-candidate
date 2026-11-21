@@ -63,4 +63,37 @@ All 31 implementation tests pass. The three independent holdout mutations still 
 
 Reproduce the final measurement with `python tools/benchmark.py --kit KIT_PATH --image blast-radius-fine-local --mode fine --save ../results/fine`. Build that image from the repository root with the same Docker build command used above. Rebuild the setting-read index with `python tools/build_settings.py PINNED_SQLGLOT_PATH artifacts` and run `python3.13 tools/test_audit.py` inside the profiling environment. No sample labels or prediction files are stored in the submission.
 
-Four sample patches still use the full-suite fallback. Arbitrary initialization, dynamic reflection, native readers, shared-state effects and source-position observers outside baseline observations remain limitations. The AST-preserving path relies on observed source readers and static metadata observers. Hidden-set recall and the new competition score remain unverified.
+At that stage four sample patches still used the full-suite fallback. The next candidate below replaces those fallbacks with baseline class dependencies. Arbitrary initialization, dynamic reflection, native readers, shared-state effects and source-position observers outside baseline observations remain limitations.
+
+## Class and operand dependencies: final candidate
+
+Two additional independent class-setting mutations were checked against a fixed 181-test Windows scope. Its baseline passed 181 tests and 2837 subtests. The Snowflake TRY_CAST constraint mutation produced one failing test, which was selected; the TSQL typed-division mutation produced no failures in that scope. Both selected fewer than the full catalog (373 and 193 tests respectively). These checks do not establish recall outside that scope.
+
+The class profiler passed all 1620 tests and 25440 subtests on the pinned Linux environment in 562.34 seconds. The independent operand profiler passed the same suite in 988.07 seconds. Worker replay passed 25 tests and 2586 subtests in 325.65 seconds and verified 24 guarded contexts; the unresolved lazy-load context remains included. Neither profiler receives sample patches or answers. The maps include source references and copied initialization dependencies, with conservative unions for shared workers.
+
+| Refinement | Simulated seconds | Missed commits |
+| --- | ---: | ---: |
+| Previous published candidate | 328.456 | 0 |
+| Expression entry anchors | 325.558 | 0 |
+| NoneType identity slots | 302.771 | 0 |
+| Class maps with broad reference propagation | 220.402 | 0 |
+| Distinguish class identity references from field reads | 184.875 | 0 |
+| Canonical finite enum domains | 161.800 | 0 |
+
+All four former full-suite cases now use narrower selections: the tokenizer setting selects 287 tests, the dialect offset 193, the parser factory argument 34, and the expression argument constraint 5. The final output selects 728 test instances across 30 commits and covers all 73 labeled failing instances.
+
+The final image was built with the pinned root Dockerfile and four-core, 8 GB build settings. All three measurements used two cores, 4 GB, no network, nobody, read-only root, HOME=/tmp, 64 MB tmpfs and a 256-PID limit. The original scorer was unchanged.
+
+| Run | Simulated seconds | CPU seconds | Local total seconds | Selector wall seconds |
+| --- | ---: | ---: | ---: | ---: |
+| 1 | 161.800 | 17.042418 | 178.842418 | 17.31 |
+| 2 | 161.800 | 21.071526 | 182.871526 | 21.20 |
+| 3 | 161.800 | 16.940031 | 178.740031 | 16.95 |
+
+The median local total is **178.842418 seconds**, rounding to **178.8 seconds**, with zero missed commits in every run. This is 46.8% below the preceding published local median of 336.121373. The displayed leader in the supplied screenshot scored 138.1 seconds; this candidate's local median remains 40.742418 seconds above that result, and the machines and accounting endpoints may differ. The competition server score is unmeasured.
+
+Peak memory was 122851328 bytes, peak PID count 6, and stdout 4167 bytes. The independent 45-patch stress batch passed schema checks in 21.11 selector seconds, 19.254281 CPU seconds and 179773440 peak bytes, with 80187 output bytes. No failure truth was collected for that stress batch. All 46 implementation tests and three exact-Linux profiling guard tests passed. The previous three independent holdouts still selected all four observed failing instances within the fixed 50-test Windows scope.
+
+Reproduce the final three runs with `python tools/benchmark.py --kit KIT_PATH --image blast-radius-next-local --mode fine --save ../results/class-final`. Rebuild the supplemental baseline artifacts using the pinned profiling image: run `build_classes.py` and `build_operands.py` in separate fresh containers, then `refine_classes.py` in another, adding static references with `refine_class_refs.py`. Merge the parent and verified-worker maps with `merge_consumers.py`, propagate initialization dependencies with `refine_class_links.py`, and generate `build_type_domains.py` in a fresh container. Each tool provides `--help`; mount the whole repository at `/submission` and the catalog separately. The final class/operand hashes and worker verification list are recorded in `artifacts/consumers-manifest.json`. Regenerate its hashes after class-link propagation. The enum-domain map reproduced byte for byte on Linux, with SHA-256 `e211ce047ae588b5857f3ceb4feac232d1fd286c4b4eef8cd3869f9e5bea76de`.
+
+These dependencies describe baseline behavior, not a general proof of hidden-set soundness. New reflective or native constructor bypasses, class metadata observers, dynamic callbacks and cache effects outside the measured baseline can invalidate an inferred dependency. Finite enum equivalence relies on canonical construction and stable builtin equality; known mutation contexts are retained, direct constructor bypasses disable the proof, and multi-file patches disable operand proofs. The isolated import check detects initialization failures but does not establish equivalence of every initialization side effect. Hidden-set recall and the competition server score remain unverified.

@@ -31,6 +31,19 @@ def diff(old, new, path=PATH, n=3):
 
 
 class SelectorTest(unittest.TestCase):
+    def test_class_consumers_and_import_initialization_guard(self):
+        self.put('sqlglot/__init__.py', '')
+        source = 'class Config:\n    VALUE = 1\n    if VALUE == 2:\n        raise RuntimeError("invalid configuration")\n'
+        self.put(PATH, source)
+        self.map['files'][PATH] = {'lines':{},'global':[1,2,3,4]}
+        data = {'base':BASE,'catalog':self.map['catalog'],'complete':True,
+                'classes':{'sqlglot.example:Config':'2'},'always_include':'8'}
+        with gzip.open(self.root/'classes.json.gz','wt',encoding='utf-8') as file:
+            json.dump(data,file)
+        selector = self.selector('fine')
+        self.assertEqual(selector.select(diff(source,source.replace('VALUE = 1','VALUE = 3'))),{1,3})
+        self.assertEqual(selector.select(diff(source,source.replace('VALUE = 1','VALUE = 2'))),set(range(5)))
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)

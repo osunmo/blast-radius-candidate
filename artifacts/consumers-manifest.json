@@ -1,0 +1,44 @@
+{
+  "base": "eb11aec4be8cb2122afe713a4816662c3f0fb2fa",
+  "catalog": 1620,
+  "verified_workers": [
+    "tests/test_executor.py::TestExecutor::test_execute_tpcds",
+    "tests/test_executor.py::TestExecutor::test_execute_tpch",
+    "tests/test_optimizer.py::TestOptimizer::test_canonicalize",
+    "tests/test_optimizer.py::TestOptimizer::test_canonicalize_internal_names",
+    "tests/test_optimizer.py::TestOptimizer::test_eliminate_ctes",
+    "tests/test_optimizer.py::TestOptimizer::test_eliminate_joins",
+    "tests/test_optimizer.py::TestOptimizer::test_eliminate_subqueries",
+    "tests/test_optimizer.py::TestOptimizer::test_isolate_table_selects",
+    "tests/test_optimizer.py::TestOptimizer::test_merge_subqueries",
+    "tests/test_optimizer.py::TestOptimizer::test_normalize",
+    "tests/test_optimizer.py::TestOptimizer::test_normalize_identifiers",
+    "tests/test_optimizer.py::TestOptimizer::test_optimize",
+    "tests/test_optimizer.py::TestOptimizer::test_optimize_joins",
+    "tests/test_optimizer.py::TestOptimizer::test_pushdown_cte_alias_columns",
+    "tests/test_optimizer.py::TestOptimizer::test_pushdown_predicates",
+    "tests/test_optimizer.py::TestOptimizer::test_pushdown_projection",
+    "tests/test_optimizer.py::TestOptimizer::test_qualify_columns",
+    "tests/test_optimizer.py::TestOptimizer::test_qualify_columns__with_invisible",
+    "tests/test_optimizer.py::TestOptimizer::test_qualify_tables",
+    "tests/test_optimizer.py::TestOptimizer::test_quote_identifiers",
+    "tests/test_optimizer.py::TestOptimizer::test_simplify",
+    "tests/test_optimizer.py::TestOptimizer::test_tpcds",
+    "tests/test_optimizer.py::TestOptimizer::test_tpch",
+    "tests/test_optimizer.py::TestOptimizer::test_unnest_subqueries"
+  ],
+  "facts": {
+    "classes": {
+      "bytes": 55702,
+      "sha256": "f6171edceea003c14a77410dc2e7a8beb93fd32084ab56f1ff058ee0945429dc",
+      "always_include": 1,
+      "entries": 1287
+    },
+    "operands": {
+      "bytes": 37812,
+      "sha256": "d084c3b1e4d0750b0fbcf2470f99d24641f8beeb87eed38feda2ba46f59fa982",
+      "always_include": 1,
+      "entries": 128
+    }
+  }
+}

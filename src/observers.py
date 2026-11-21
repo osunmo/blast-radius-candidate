@@ -9,6 +9,7 @@ METADATA = {
     "__code__", "__doc__", "__annotations__", "co_consts", "co_firstlineno",
     "_getframe", "f_code", "f_lineno", "tb_lineno", "gi_code", "cr_code",
     "co_positions", "co_lines", "co_linetable", "co_filename", "__traceback__",
+    "get_type_hints", "get_annotations",
 }
 
 
@@ -33,6 +34,8 @@ def reflective_modules(root):
                 dependencies.add(target)
                 dependencies.update(f"{target}.{a.name}" for a in node.names)
         if any(dep.split(".")[0] in {"inspect", "doctest", "traceback", "linecache", "dis"} for dep in dependencies):
+            observers.add(module)
+        if any(dep.endswith(('.get_type_hints','.get_annotations')) for dep in dependencies):
             observers.add(module)
         for dependency in dependencies:
             parts = dependency.split(".")

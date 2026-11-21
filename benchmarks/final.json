@@ -1,0 +1,50 @@
+[
+  {
+    "run": 1,
+    "simulated": 161.8,
+    "cpu": 17.042418,
+    "total": 178.842418,
+    "wall": 20.06548340000154,
+    "missed": [],
+    "selected": 728,
+    "hits": 73,
+    "failures": 73,
+    "commits": 30,
+    "bytes": 4167,
+    "peak_bytes": 122851328,
+    "peak_pids": 5,
+    "selector_wall": 17.31
+  },
+  {
+    "run": 2,
+    "simulated": 161.8,
+    "cpu": 21.071526,
+    "total": 182.87152600000002,
+    "wall": 24.152283599993098,
+    "missed": [],
+    "selected": 728,
+    "hits": 73,
+    "failures": 73,
+    "commits": 30,
+    "bytes": 4167,
+    "peak_bytes": 121573376,
+    "peak_pids": 6,
+    "selector_wall": 21.2
+  },
+  {
+    "run": 3,
+    "simulated": 161.8,
+    "cpu": 16.940031,
+    "total": 178.74003100000002,
+    "wall": 19.2974635999999,
+    "missed": [],
+    "selected": 728,
+    "hits": 73,
+    "failures": 73,
+    "commits": 30,
+    "bytes": 4167,
+    "peak_bytes": 121933824,
+    "peak_pids": 6,
+    "selector_wall": 16.95
+  }
+]

@@ -7,12 +7,16 @@ import json
 import marshal
 import re
 import sys
+import subprocess
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
 from .diff import Change, Unsupported, parse_patch
 from .fine import lambda_selection, changed_setting, setting_consumers
+from .classdeps import changed_classes
+from .expressions import expression_anchor
+from .operands import identity_consumers
 from .observers import reflective_modules
 from .shared import bindings, class_receiver, local_nodes, mutation_owner, shared_producers
 
@@ -217,6 +221,11 @@ class Selector:
         self.observers = 0
         self.shared = {}
         self.setting_reads = None
+        self.class_consumers = None
+        self.class_always = 0
+        self.operand_sites = None
+        self.operand_always = 0
+        self.type_domains = None
         self.error = "all-tests baseline"
         if mode == "all":
             return
@@ -262,7 +271,52 @@ class Selector:
                 if index['base'] != BASE:
                     raise Unsupported('settings index revision mismatch')
                 self.setting_reads = index['reads']
+            classes = Path(artifact_dir) / 'classes.json.gz'
+            if self.mode == 'fine' and classes.is_file():
+                with gzip.open(classes, 'rt', encoding='utf-8') as f:
+                    index = json.load(f)
+                if index.get('complete') is not True or index['base'] != BASE or index['catalog'] != [t['id'] for t in self.tests]:
+                    raise Unsupported('class-consumer map mismatch')
+                self.class_consumers = {key:self.bits(value) for key,value in index['classes'].items()}
+                self.class_always = self.bits(index['always_include'])
+            operands = Path(artifact_dir) / 'operands.json.gz'
+            if self.mode == 'fine' and operands.is_file():
+                with gzip.open(operands, 'rt', encoding='utf-8') as f:
+                    index = json.load(f)
+                if index.get('complete') is not True or index['base'] != BASE or index['catalog'] != [t['id'] for t in self.tests]:
+                    raise Unsupported('operand map mismatch')
+                for pairs in index['sites'].values():
+                    if not pairs:
+                        raise Unsupported('empty operand domain')
+                    for signature, bits in pairs.items():
+                        domain = json.loads(signature)
+                        if (not isinstance(domain, list) or len(domain) != 6
+                                or not all(isinstance(value, str) for value in domain[:2])
+                                or not all(isinstance(value, bool) for value in domain[2:])):
+                            raise Unsupported('invalid operand domain')
+                        self.bits(bits)
+                self.operand_sites = index['sites']
+                self.operand_always = self.bits(index['always_include'])
+            domains = Path(artifact_dir) / 'type-domains.json.gz'
+            if self.mode == 'fine' and domains.is_file():
+                with gzip.open(domains,'rt',encoding='utf-8') as f:
+                    index=json.load(f)
+                if index['base'] != BASE or index['catalog'] != [t['id'] for t in self.tests]:
+                    raise Unsupported('type-domain map mismatch')
+                self.bits(index['always_include'])
+                if index['constructor_bypasses']:
+                    raise Unsupported('unverified enum construction')
+                for domain in index['enums'].values():
+                    kind = domain['kind']
+                    values = domain['members']
+                    if kind not in {'canonical-str-enum','canonical-int-enum'} or not 1 <= len(values) <= 16:
+                        raise Unsupported('invalid enum domain')
+                    expected = str if kind == 'canonical-str-enum' else int
+                    if any(type(value) is not expected for value in values) or len(set(values)) != len(values):
+                        raise Unsupported('noncanonical enum payloads')
+                self.type_domains=index
         except (ValueError, TypeError, KeyError, AttributeError, OSError, EOFError, SyntaxError, ImportError) as exc:
+            self.coverage = None
             self.error = str(exc)
 
     def bits(self, value):
@@ -304,19 +358,20 @@ class Selector:
             mask = self.always
             if self.explain and self.always:
                 print(f"always include {self.always.bit_count()} opaque tests", file=sys.stderr)
-            for change in parse_patch(patch_text):
+            changes = parse_patch(patch_text)
+            for change in changes:
                 location = change.path
-                selected = self.file_selection(change)
+                selected = self.file_selection(change, allow_operand_proof=len(changes)==1)
                 mask |= selected
             if self.explain:
                 print(f"selected {mask.bit_count()} tests in union", file=sys.stderr)
             return {n for n in self.all if (mask >> n) & 1}
-        except (ValueError, TypeError, KeyError, AttributeError, OSError, SyntaxError, ImportError, RecursionError) as exc:
+        except (ValueError, TypeError, KeyError, AttributeError, OSError, SyntaxError, ImportError, RecursionError, subprocess.SubprocessError) as exc:
             if self.explain:
                 print(f"{location}: full suite ({exc})", file=sys.stderr)
             return self.all.copy()
 
-    def file_selection(self, change: Change):
+    def file_selection(self, change: Change, allow_operand_proof=True):
         path = change.path
         source = self.source(path)
         updated, edits = change.apply(source)
@@ -341,12 +396,36 @@ class Selector:
             if (text_candidate(source.split('\n'), updated.split('\n'), edits)
                     and ast.dump(ast.parse(source)) == ast.dump(ast.parse(updated))):
                 return mask
+            if self.operand_sites is not None and allow_operand_proof:
+                consumers = identity_consumers(source, updated, path, self.operand_sites, self.type_domains)
+                if consumers is not None:
+                    if self.explain:
+                        print(f'{path}: baseline comparison operand domains',file=sys.stderr)
+                    return mask | self.bits(format(consumers, 'x')) | self.operand_always
             scopes = self.index(path)
             if any(scopes.owner(edit.old_start, edit.old_end) is None for edit in edits):
                 attributed, _ = self.lines(path)
                 expression = lambda_selection(source, updated, attributed)
                 if expression is not None:
                     return mask | expression
+                owners = changed_classes(source, updated)
+                if owners and self.class_consumers is not None:
+                    consumers = self.class_always
+                    module = path[:-3].replace('/', '.')
+                    for owner in owners:
+                        key = module + ':' + owner
+                        if key not in self.class_consumers:
+                            raise Unsupported('no baseline consumers for changed class')
+                        consumers |= self.class_consumers[key]
+                    result = subprocess.run(
+                        [sys.executable, '-B', str(Path(__file__).with_name('importcheck.py')), str(self.root)],
+                        input=json.dumps({'path':path,'source':updated}), text=True,
+                        capture_output=True, timeout=8)
+                    if result.returncode or result.stdout.splitlines()[-1:] != ['blast-import-ok']:
+                        raise Unsupported('patched module initialization failed')
+                    if self.explain:
+                        print(f'{path}: concrete consumers of {sorted(owners)}',file=sys.stderr)
+                    return mask | consumers
                 names = changed_setting(source, updated)
                 if names:
                     consumers = setting_consumers(self.root, self.coverage, names, self.setting_reads)
@@ -399,6 +478,11 @@ class Selector:
             narrow = (self.mode in {"line", "hybrid", "verified", "fine"} and single_line_change(old, new, edit)
                       and edit.old_end in lines)
             start, end = (edit.old_end, edit.old_end) if narrow else (before.start, before.end)
+            if self.mode == 'fine' and not narrow:
+                anchor = expression_anchor(before.node, after.node, edit)
+                if anchor is not None and anchor in lines:
+                    start = end = anchor
+                    narrow = True
             if any(start <= n <= end for n in initial):
                 raise Unsupported("also executed outside attributed tests")
             if self.mode == "file":
