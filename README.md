@@ -23,7 +23,7 @@ python "$KIT/score.py" "$KIT/sample" "$KIT/sample/answers.json" ../predictions.j
 
 ## How selection works
 
-The additional `fine` mode isolates existing lambda bodies, checks source readers and metadata observers for AST-preserving text changes, and indexes reads of existing literal class settings. It retains the full-suite fallback when initialization consumers or dynamic lookups cannot be attributed. AST equality alone does not prove that source positions are unobservable. The source-reader and metadata-observer maps are part of this decision, and unobserved reflective behavior remains a limitation.
+The default `fine` mode isolates existing lambda bodies, checks source readers and metadata observers for AST-preserving text changes, and indexes reads of existing literal class settings. It retains the full-suite fallback when initialization consumers or dynamic lookups cannot be attributed. AST equality alone does not prove that source positions are unobservable. The source-reader and metadata-observer maps are part of this decision, and unobserved reflective behavior remains a limitation.
 
 The worker profiler distinguishes loader source opens from program source reads through audit-hook wrappers. It records actual optimized function execution separately from module and class initialization, and retains exact parent fixture contexts while unioning shared worker lifetime dependencies. Run `python3.13 tools/test_audit.py` in the profiling environment to verify the audit-hook regression. Rebuild the static setting-read index with `python tools/build_settings.py "$SCRATCH/sqlglot" artifacts`.
 

@@ -31,4 +31,36 @@ The independent 45-patch stress check finished in 15.47 selector seconds, 14.701
 
 Reproduce with python -m unittest discover -s tests, then docker build --platform linux/amd64 --resource cpu-quota=400000 --resource memory=8g -t blast-radius-final-local . and python tools/benchmark.py --kit KIT_PATH --image blast-radius-final-local --mode hybrid --save ../results/final.
 
-Remaining limitations include dynamic callbacks, aliased shared state, warm caches, native file reads and environment-dependent behavior outside baseline observations. Hidden-set soundness and the server score remain unverified. Offline Linux profiling took over 36 minutes locally, so the committed maps are needed for a quick competition build. Publication and competition submission remain owner actions.
+Remaining limitations include dynamic callbacks, aliased shared state, warm caches, native file reads and environment-dependent behavior outside baseline observations. Hidden-set soundness and the server score remain unverified. Offline Linux profiling took over 36 minutes locally, so the committed maps are needed for a quick competition build.
+
+## Finer dependency candidate
+
+The results above describe the original hybrid submission. The new default is `fine`. It reduces sample simulated seconds by 50.6% relative to the original candidate on the same supplied sample. Its server score is unmeasured.
+
+| Experiment | Simulated seconds | Missed commits | Notes |
+| --- | ---: | ---: | --- |
+| Original hybrid | 665.107 | 0 | Published baseline |
+| Lambda expressions and text observers | 499.208 | 0 | Separate lambda bodies from dispatch initialization |
+| Literal-setting exploratory version | 470.767 | 0 | Rejected after adding dynamic-lookup and initialization guards |
+| Corrected audit-wrapper attribution | 367.421 | 0 | Loader reads excluded through the replay subclass |
+| Exact parent fixture contexts | 328.456 | 0 | Keep parent reads separate from shared worker lifetime unions |
+
+The source-audit bug was reproduced with a collector subclass. The base audit callback saw the replay wrapper instead of the loader and recorded imported source as a text dependency. `tools/test_audit.py` verifies exclusion of loader reads through the subclass and retention of actual source reads. It passed on the exact Linux profiling interpreter and on the local Python 3.13 interpreter. The profiler also retains module/class initialization separately from optimized function execution. Parent-side fixture reads retain their item contexts, while verified shared worker dependencies retain their conservative pool union.
+
+The final replay passed all 25 targeted tests and 2586 subtests. Its independent workload census passed 22 tests and 2529 subtests. Complete child coverage was verified for 24 guarded tests. The map covers all 1620 catalog IDs with remaining uncertainty accounted for. Its SHA-256 is `59a6f80f1aa3ab2bf33f11bb072afbb0ba5b95d9390dbf0206e153b01416762d`. It has 243 source files, 143 recorded reads and 624473 compressed bytes. The setting-read index reproduced byte for byte with SHA-256 `d710ba1376e68bfce22cef2edab6195a9db8c05e6ad0d86bd5f3fb95b91d0916`.
+
+Runtime source commit `697f00a` was built from a clean local clone with the official pinned image and upstream checkout. The preceding clean build took 22.587 seconds. The final build reused cached upstream layers. All three final runs used two cores, 4 GB, no network, user nobody, HOME=/tmp, read-only root, 64 MB temporary storage and a 256-process limit.
+
+| Run | Simulated seconds | CPU seconds | Local total seconds | Selector wall seconds |
+| --- | ---: | ---: | ---: | ---: |
+| 1 | 328.456 | 8.014455 | 336.470455 | 7.95 |
+| 2 | 328.456 | 5.627497 | 334.083497 | 5.67 |
+| 3 | 328.456 | 7.665373 | 336.121373 | 7.97 |
+
+The median local total is **336.121373 seconds**, rounding to **336.1 seconds**. Each run covered all 73 failing test instances with zero missed commits. Selected instances fell from 18516 to 6972. Each output was 31258 bytes. Maximum memory was 76574720 bytes and maximum PID count was 7. The CPU measurement includes the small profiling shell and is taken immediately before container shutdown.
+
+All 31 implementation tests pass. The three independent holdout mutations still cover all four observed failing instances within their fixed 50-test Windows validation scope. Selected counts fell to 7, 2 and 85. The 45-patch stress batch passed output-format checks in 23.03 selector seconds, 21.808749 CPU seconds and 177799168 peak bytes. Its output was 80187 bytes. Ground truth was not collected for the stress batch.
+
+Reproduce the final measurement with `python tools/benchmark.py --kit KIT_PATH --image blast-radius-fine-local --mode fine --save ../results/fine`. Build that image from the repository root with the same Docker build command used above. Rebuild the setting-read index with `python tools/build_settings.py PINNED_SQLGLOT_PATH artifacts` and run `python3.13 tools/test_audit.py` inside the profiling environment. No sample labels or prediction files are stored in the submission.
+
+Four sample patches still use the full-suite fallback. Arbitrary initialization, dynamic reflection, native readers, shared-state effects and source-position observers outside baseline observations remain limitations. The AST-preserving path relies on observed source readers and static metadata observers. Hidden-set recall and the new competition score remain unverified.
