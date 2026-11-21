@@ -338,17 +338,20 @@ class Selector:
         mask = readers | self.observers
         if self.mode == "fine":
             compile(updated, path, "exec", dont_inherit=True)
-            if ast.dump(ast.parse(source)) == ast.dump(ast.parse(updated)):
+            if (text_candidate(source.split('\n'), updated.split('\n'), edits)
+                    and ast.dump(ast.parse(source)) == ast.dump(ast.parse(updated))):
                 return mask
-            attributed, _ = self.lines(path)
-            expression = lambda_selection(source, updated, attributed)
-            if expression is not None:
-                return mask | expression
-            names = changed_setting(source, updated)
-            if names:
-                consumers = setting_consumers(self.root, self.coverage, names, self.setting_reads)
-                if consumers is not None:
-                    return mask | consumers
+            scopes = self.index(path)
+            if any(scopes.owner(edit.old_start, edit.old_end) is None for edit in edits):
+                attributed, _ = self.lines(path)
+                expression = lambda_selection(source, updated, attributed)
+                if expression is not None:
+                    return mask | expression
+                names = changed_setting(source, updated)
+                if names:
+                    consumers = setting_consumers(self.root, self.coverage, names, self.setting_reads)
+                    if consumers is not None:
+                        return mask | consumers
         if self.explain and mask:
             print(f"{path}: {readers.bit_count()} source readers, "
                   f"{self.observers.bit_count()} metadata observers", file=sys.stderr)
