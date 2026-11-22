@@ -1,0 +1,50 @@
+{
+  "base": "eb11aec4be8cb2122afe713a4816662c3f0fb2fa",
+  "catalog_count": 1620,
+  "field_map": {
+    "path": "fields.json.gz",
+    "sha256": "bdf36ce238e80fc44d6a85cb1678b605022cc417890c02df3599b6cda2f6602c",
+    "bytes": 457535,
+    "fields": 26047,
+    "initialization": 6842,
+    "opaque": 25,
+    "untrusted": 14,
+    "certificate": {
+      "foreign_receiver_guards": true,
+      "static_guards": true,
+      "test_modules": 58,
+      "worker_contexts_count": 25,
+      "worker_contexts_indexed": true,
+      "worker_manifest_sha256": "77797ed43ffccb9460f53e9681b2ab681acc4ec52b01dcf97ada9f65c455b8cf",
+      "worker_policy": "linked-class-consumer fallback"
+    }
+  },
+  "linux_profiles": {
+    "tests": 1620,
+    "parameterized_contexts": 25440,
+    "field_seconds": 741.27,
+    "reflection_seconds": 1467.13,
+    "timing_source": "parent-agent completed profile report; not rerun"
+  },
+  "opaque_policy": "25 worker contexts use linked class consumer fallback; certificate carries worker manifest SHA256",
+  "foreign_policy": "14 contexts conservatively guard all SQLGlot fields; no per-MRO relaxation",
+  "selector_requirement": "Source old/new scalar literals, certified baseline primitive own namespace, and fresh imported updated primitive own namespace",
+  "class_provenance": "Parent baseline class map refined with monotonic cold runtime additions; classes-links and consumers-manifest verify current runtime class bytes. Lazy manifest parent hashes describe parent inputs, not current output bytes.",
+  "original_manifest_sha256": "77797ed43ffccb9460f53e9681b2ab681acc4ec52b01dcf97ada9f65c455b8cf",
+  "parent_candidate_sha256": {
+    "classes-links.json": "fffb29a6814a1cf184fa8e465f35a86004d0457aa59fea48b89906c41ca12f66",
+    "classes.json.gz": "f5fad68326661c829b5285a7334784df0d160fc63ff694002be26da2d6dcd450",
+    "consumers-manifest.json": "895e5468677021f2299a180b5e5306eb909ecca6ad33297bcdf95252909d8a4f",
+    "coverage.json.gz": "e7e7739a3373caa54fbca48ba9c369212eb48114dbfd518e2dab7add8795de3e",
+    "fields.json.gz": "bdf36ce238e80fc44d6a85cb1678b605022cc417890c02df3599b6cda2f6602c",
+    "lazy-manifest.json": "96d1256ea341802318ecd43ab47853377a1d834fb42d76aae67ee4ec03532428",
+    "manifest.json": "83a08d5f0e25c22e34327e9ecf65d63aa690dd4323da9dd053d9a5124429446a",
+    "metadata.json": "2a83634f4989c031188638abfaca9bd21be3714b4b65fa0f03613debc4ac4287",
+    "observers.json": "38462e523c195dd0df64dc23662b55824d2bd117710437ae13968a0f3c55dfdc",
+    "operands.json.gz": "04355f06f5ce5e0ecd9f49a49eafaad4e7be28017c8e450041bd9980685fd8fc",
+    "scopes.json.gz": "646be59ba44742f74afa0eba245455002d189b0f652ee046797982dd9442f5b1",
+    "settings.json.gz": "d710ba1376e68bfce22cef2edab6195a9db8c05e6ad0d86bd5f3fb95b91d0916",
+    "type-domains-manifest.json": "a22529e0dcc9ce8e9b340d6e50cd841af6af453447a852f37ffc194ef4404565",
+    "type-domains.json.gz": "e211ce047ae588b5857f3ceb4feac232d1fd286c4b4eef8cd3869f9e5bea76de"
+  }
+}

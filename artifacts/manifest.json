@@ -3,8 +3,8 @@
   "additional_collected": [
     "tests/dialects/test_sqlite.py::TestSQLite::test_variadic_iif_execution"
   ],
-  "always_include_count": 1,
-  "attributed_lines": 79762,
+  "always_include_count": 0,
+  "attributed_lines": 89892,
   "base": "eb11aec4be8cb2122afe713a4816662c3f0fb2fa",
   "catalog": 1620,
   "catalog_collected": 1620,
@@ -94,13 +94,21 @@
   "elapsed_seconds": 2210.543,
   "files_with_coverage": 243,
   "global_lines": 27239,
-  "gzip_bytes": 624473,
+  "gzip_bytes": 582110,
   "import_sweep": {
     "import_errors": [],
     "modules": 183,
     "opaque": false
   },
-  "json_bytes": 17966993,
+  "isolated_subprocess_refinement": {
+    "producer": "refine_lazy-v2",
+    "report_sha256": "8a5b89b0cf7b035749fd3bed1ad7f1eb652852a06f8509a6591b2816b90bb4de",
+    "verified_groups": 1,
+    "verified_tests": [
+      "tests/dialects/test_dialect.py::TestDialect::test_lazy_load"
+    ]
+  },
+  "json_bytes": 18607897,
   "line_matrix_encoding_comparison": {
     "hex_bitsets": {
       "deflate_bytes": 561740,
@@ -112,7 +120,7 @@
     }
   },
   "map_format": 1,
-  "map_sha256": "59a6f80f1aa3ab2bf33f11bb072afbb0ba5b95d9390dbf0206e153b01416762d",
+  "map_sha256": "e7e7739a3373caa54fbca48ba9c369212eb48114dbfd518e2dab7add8795de3e",
   "nonpassing_or_missing_phase": [],
   "opaque_child_process": [
     "tests/dialects/test_dialect.py::TestDialect::test_lazy_load",

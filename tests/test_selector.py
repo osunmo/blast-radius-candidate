@@ -1,6 +1,7 @@
 import difflib
 from contextlib import redirect_stderr, redirect_stdout
 import gzip
+import hashlib
 import json
 import io
 import sys
@@ -31,6 +32,106 @@ def diff(old, new, path=PATH, n=3):
 
 
 class SelectorTest(unittest.TestCase):
+    def test_added_sql_fixture_uses_directory_and_missing_path_consumers(self):
+        directory={'version':1,'base':BASE,'catalog':self.map['catalog'],'complete':True,
+            'known_directories':['.','tests','tests/fixtures'],'known_files':['tests/fixtures/case.sql'],
+            'symlinks':[],'directories':{'tests/fixtures':'2'},
+            'probes':{'tests/fixtures/extra.sql':'4'},'opens':{},
+            'untrusted':'0','opaque':'0','native_guard':'0','always_include':'10',
+            'certificate':{'operations':['add_regular_sql_fixture'],'deletions':False,
+                'worker_contexts_indexed':True,'native_boundary':'third-party filesystem library consumer fallback'}}
+        with gzip.open(self.root/'directories.json.gz','wt',encoding='utf-8') as f:
+            json.dump(directory,f)
+        patch=('diff --git a/tests/fixtures/extra.sql b/tests/fixtures/extra.sql\n'
+               'new file mode 100644\n--- /dev/null\n+++ b/tests/fixtures/extra.sql\n'
+               '@@ -0,0 +1 @@\n+SELECT 1;\n')
+        self.assertEqual(self.selector('fine').select(patch),{1,2,4})
+        self.assertEqual(self.selector('fine').select(patch.replace('extra.sql','case.sql')),set(range(5)))
+        deleted=('diff --git a/tests/fixtures/case.sql b/tests/fixtures/case.sql\n'
+                 'deleted file mode 100644\n--- a/tests/fixtures/case.sql\n+++ /dev/null\n'
+                 '@@ -1 +0,0 @@\n-SELECT 1;\n')
+        self.assertEqual(self.selector('fine').select(deleted),set(range(5)))
+
+    def test_package_initializer_class_uses_canonical_module_name(self):
+        path='sqlglot/__init__.py'
+        source='from .sub import HELPER\nclass Config:\n    VALUE = 1\n'
+        self.put(path,source)
+        self.put('sqlglot/sub.py','HELPER = 1\n')
+        self.map['files'][path]={'lines':{},'global':[1,2,3]}
+        classes={'base':BASE,'catalog':self.map['catalog'],'complete':True,
+                 'classes':{'sqlglot:Config':'2'},'always_include':'0'}
+        with gzip.open(self.root/'classes.json.gz','wt',encoding='utf-8') as f:
+            json.dump(classes,f)
+        self.assertEqual(self.selector('fine').select(diff(source,source.replace('VALUE = 1','VALUE = 3'),path)),{1})
+
+    def test_field_readers_narrow_existing_setting_with_initializer_guard(self):
+        self.put('sqlglot/__init__.py','')
+        source='class Config:\n    VALUE = 1\n    if VALUE == 2:\n        raise RuntimeError("invalid")\n'
+        self.put(PATH,source)
+        self.map['files'][PATH]={'lines':{},'global':[1,2,3,4]}
+        classes={'base':BASE,'catalog':self.map['catalog'],'complete':True,
+                 'classes':{'sqlglot.example:Config':'2'},'always_include':'8'}
+        fields={'base':BASE,'version':1,'catalog':self.map['catalog'],'complete':True,
+                'fields':{'sqlglot.example:Config:VALUE':'4'},'class_guards':{},
+                'membership_consumers':{},'global_guard_classes':[],
+                'initialization':[],'untrusted':'0','opaque':'0','always_include':'0',
+                'reflection_replay':True,'certificate':{'static_guards':True,
+                    'worker_policy':'linked-class-consumer fallback','foreign_receiver_guards':True,
+                    'worker_contexts_indexed':True}}
+        for name,data in [('classes',classes),('fields',fields)]:
+            with gzip.open(self.root/(name+'.json.gz'),'wt',encoding='utf-8') as f:
+                json.dump(data,f)
+        def scalar_contract():
+            self.put('scalars.json',json.dumps({'version':1,'base':BASE,'complete':True,
+                'catalog':self.map['catalog'],'fields':['sqlglot.example:Config:VALUE'],
+                'field_map_sha256':hashlib.sha256((self.root/'fields.json.gz').read_bytes()).hexdigest()}))
+        scalar_contract()
+        selector=self.selector('fine')
+        self.assertEqual(selector.select(diff(source,source.replace('VALUE = 1','VALUE = 3'))),{2,3})
+        self.assertEqual(selector.select(diff(source,source.replace('VALUE = 1','VALUE = 2'))),set(range(5)))
+        fields['initialization']=['sqlglot.example:Config:VALUE']
+        with gzip.open(self.root/'fields.json.gz','wt',encoding='utf-8') as f:
+            json.dump(fields,f)
+        scalar_contract()
+        self.assertEqual(self.selector('fine').select(diff(source,source.replace('VALUE = 1','VALUE = 3'))),{1,2,3})
+        (self.root/'scalars.json').unlink()
+        self.assertEqual(self.selector('fine').select(diff(source,source.replace('VALUE = 1','VALUE = 3'))),{1,3})
+        fields['reflection_replay']=False
+        with gzip.open(self.root/'fields.json.gz','wt',encoding='utf-8') as f:
+            json.dump(fields,f)
+        self.assertEqual(self.selector('fine').select(diff(source,source.replace('VALUE = 1','VALUE = 3'))),set(range(5)))
+
+    def test_metadata_origin_refinement_preserves_opaque_and_source_readers(self):
+        self.tests[0]['file'] = 'tests/test_reflection.py'
+        self.put('observers.json',json.dumps({'base':BASE,'files':['tests/test_reflection.py'],
+                                            'shared_producers':{}}))
+        metadata = {'version':1,'base':BASE,'catalog':self.map['catalog'],'complete':True,
+                    'collection_reads':False,'observed_tests':'1','opaque':'0',
+                    'origins':{'sqlglot/another.py':'1'}}
+        self.put('metadata.json',json.dumps(metadata))
+        change = diff(SOURCE, SOURCE.replace('return 30','return 31'))
+        self.assertEqual(self.selector('fine').select(change),{2})
+        self.map['fixtures'][PATH] = '1'
+        self.assertEqual(self.selector('fine').select(change),{0,2})
+        del self.map['fixtures'][PATH]
+        metadata['opaque'] = '1'
+        self.put('metadata.json',json.dumps(metadata))
+        self.assertEqual(self.selector('fine').select(change),{0,2})
+
+    def test_catalog_permutation_and_unknown_items_keep_dependencies(self):
+        self.tests = [{**row, 'number':4-row['number']} for row in self.tests]
+        change = diff(SOURCE, SOURCE.replace('return 10','return 100'))
+        self.assertEqual(self.selector('fine').select(change),{4})
+        self.tests = [dict(self.tests[-1],number=0),
+                      {'id':'tests/test_new.py::test_new','file':'tests/test_new.py','number':1}]
+        self.assertEqual(self.selector('fine').select(change),{1})
+
+    def test_equivalent_initialization_retains_text_and_opaque_observers(self):
+        self.map['fixtures'][PATH] = '10'
+        self.map['always_include'] = '8'
+        change = diff(SOURCE, SOURCE.replace('LIMIT = 3','LIMIT = 1 + 2'))
+        self.assertEqual(self.selector('fine').select(change),{3,4})
+
     def test_class_consumers_and_import_initialization_guard(self):
         self.put('sqlglot/__init__.py', '')
         source = 'class Config:\n    VALUE = 1\n    if VALUE == 2:\n        raise RuntimeError("invalid configuration")\n'
@@ -204,9 +305,9 @@ def acquire(key):
 
     def test_mismatched_catalog_and_missing_coverage_expand(self):
         change = diff(SOURCE, SOURCE.replace("return 10", "return 1"))
-        self.map["catalog"].reverse()
+        self.map["catalog"][0] = self.map["catalog"][1]
         self.assertEqual(self.selector().select(change), set(range(5)))
-        self.map["catalog"].reverse()
+        self.map["catalog"] = [row['id'] for row in self.tests]
         self.map["unmapped"] = "4"
         self.assertEqual(self.selector().select(change), set(range(5)))
         self.map["unmapped"] = "0"

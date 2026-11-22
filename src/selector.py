@@ -15,8 +15,12 @@ from pathlib import Path
 from .diff import Change, Unsupported, parse_patch
 from .fine import lambda_selection, changed_setting, setting_consumers
 from .classdeps import changed_classes
+from .fielddeps import changed_fields, field_consumers, scalar_fields_only
 from .expressions import expression_anchor
 from .operands import identity_consumers
+from .catalog import CatalogRemapper
+from .directories import addition_consumers
+from .equivalence import computationally_equal, local_bodies_only
 from .observers import reflective_modules
 from .shared import bindings, class_receiver, local_nodes, mutation_owner, shared_producers
 
@@ -216,12 +220,19 @@ class Selector:
         self.tests = sorted(tests, key=lambda row: row["number"])
         self.all = {t["number"] for t in self.tests}
         self.mask = (1 << len(self.tests)) - 1
+        self.catalog_mapper = None
         self.coverage = None
         self.always = 0
         self.observers = 0
+        self.metadata_tracked = 0
+        self.metadata_origins = {}
         self.shared = {}
         self.setting_reads = None
         self.class_consumers = None
+        self.baseline_class_consumers = None
+        self.field_data = None
+        self.baseline_scalar_fields = None
+        self.directory_data = None
         self.class_always = 0
         self.operand_sites = None
         self.operand_always = 0
@@ -232,13 +243,12 @@ class Selector:
         try:
             with gzip.open(Path(artifact_dir) / "coverage.json.gz", "rt", encoding="utf-8") as f:
                 data = json.load(f)
-            if (data["version"] != 1 or data["base"] != BASE
-                    or any(t["number"] != n for n, t in enumerate(self.tests))
-                    or [t["id"] for t in self.tests] != data["catalog"]):
+            if data["version"] != 1 or data["base"] != BASE:
                 raise Unsupported("catalog or source revision mismatch")
+            self.catalog_mapper = CatalogRemapper(data['catalog'], self.tests)
             if self.bits(data["unmapped"]):
                 raise Unsupported("coverage collection incomplete")
-            self.always = self.bits(data.get("always_include", "0"))
+            self.always = self.bits(data.get("always_include", "0")) | self.catalog_mapper.unknown
             self.fixture_bits = {path: self.bits(bits) for path, bits in data["fixtures"].items()}
             if self.mode in {"hybrid", "verified", "fine"}:
                 index_file = Path(artifact_dir) / "observers.json"
@@ -252,6 +262,24 @@ class Selector:
                     observers = set(reflective_modules(self.root))
                     self.shared = shared_producers(self.root)
                 self.observers = sum(1 << t["number"] for t in self.tests if t["file"] in observers)
+                metadata = Path(artifact_dir) / 'metadata.json'
+                if self.mode == 'fine' and metadata.is_file():
+                    index = json.loads(metadata.read_text(encoding='utf-8'))
+                    if (index.get('complete') is not True or index['version'] != 1
+                            or index['base'] != BASE or index.get('collection_reads') is not False):
+                        raise Unsupported('uncertified metadata observers')
+                    self.catalog_mapper.validate_catalog(index['catalog'])
+                    observed, opaque = self.bits(index['observed_tests']), self.bits(index['opaque'])
+                    if opaque & ~observed:
+                        raise Unsupported('metadata guard without observed test')
+                    self.metadata_tracked = self.observers & observed & ~opaque
+                    self.metadata_origins = {path:self.bits(bits) for path,bits in index['origins'].items()}
+                    if any(bits & ~observed for bits in self.metadata_origins.values()):
+                        raise Unsupported('metadata origin without observed test')
+                    with_origins = 0
+                    for bits in self.metadata_origins.values():
+                        with_origins |= bits
+                    self.metadata_tracked &= with_origins
             if mode == "indexed":
                 with gzip.open(Path(artifact_dir) / "scopes.json.gz", "rt", encoding="utf-8") as f:
                     index = json.load(f)
@@ -275,16 +303,82 @@ class Selector:
             if self.mode == 'fine' and classes.is_file():
                 with gzip.open(classes, 'rt', encoding='utf-8') as f:
                     index = json.load(f)
-                if index.get('complete') is not True or index['base'] != BASE or index['catalog'] != [t['id'] for t in self.tests]:
+                if index.get('complete') is not True or index['base'] != BASE:
                     raise Unsupported('class-consumer map mismatch')
+                self.catalog_mapper.validate_catalog(index['catalog'])
                 self.class_consumers = {key:self.bits(value) for key,value in index['classes'].items()}
+                self.baseline_class_consumers = {key:int(value,16) for key,value in index['classes'].items()}
                 self.class_always = self.bits(index['always_include'])
+            fields = Path(artifact_dir) / 'fields.json.gz'
+            if self.mode == 'fine' and fields.is_file():
+                with gzip.open(fields, 'rt', encoding='utf-8') as f:
+                    index = json.load(f)
+                if (index.get('complete') is not True or index['version'] != 1
+                        or index['base'] != BASE or self.class_consumers is None):
+                    raise Unsupported('uncertified field-consumer map')
+                certificate = index.get('certificate', {})
+                if (index.get('reflection_replay') is not True
+                        or certificate.get('static_guards') is not True
+                        or certificate.get('foreign_receiver_guards') is not True
+                        or certificate.get('worker_contexts_indexed') is not True
+                        or certificate.get('worker_policy') != 'linked-class-consumer fallback'):
+                    raise Unsupported('incomplete field dependency certificate')
+                self.catalog_mapper.validate_catalog(index['catalog'])
+                for section in ('fields', 'class_guards', 'membership_consumers'):
+                    for value in index[section].values():
+                        self.bits(value)
+                for section in ('untrusted', 'opaque', 'always_include'):
+                    self.bits(index[section])
+                if not isinstance(index['initialization'], list) or not all(isinstance(key,str) for key in index['initialization']):
+                    raise Unsupported('invalid field initialization guards')
+                if (not isinstance(index['global_guard_classes'], list)
+                        or not all(isinstance(key,str) for key in index['global_guard_classes'])):
+                    raise Unsupported('invalid global field guards')
+                self.field_data = index
+                scalars = Path(artifact_dir) / 'scalars.json'
+                if scalars.is_file():
+                    contract = json.loads(scalars.read_text(encoding='utf-8'))
+                    if (contract.get('complete') is not True or contract['version'] != 1
+                            or contract['base'] != BASE
+                            or contract['field_map_sha256'] != hashlib.sha256(fields.read_bytes()).hexdigest()
+                            or not isinstance(contract['fields'], list)
+                            or not all(isinstance(key,str) for key in contract['fields'])):
+                        raise Unsupported('invalid baseline scalar namespace contract')
+                    self.catalog_mapper.validate_catalog(contract['catalog'])
+                    self.baseline_scalar_fields = set(contract['fields'])
+                    if not self.baseline_scalar_fields <= self.field_data['fields'].keys():
+                        raise Unsupported('scalar contract contains unknown field')
+            directories = Path(artifact_dir) / 'directories.json.gz'
+            if self.mode == 'fine' and directories.is_file():
+                with gzip.open(directories, 'rt', encoding='utf-8') as f:
+                    index = json.load(f)
+                certificate = index.get('certificate', {})
+                if (index.get('complete') is not True or index['version'] != 1 or index['base'] != BASE
+                        or certificate.get('operations') != ['add_regular_sql_fixture']
+                        or certificate.get('deletions') is not False
+                        or certificate.get('worker_contexts_indexed') is not True
+                        or certificate.get('native_boundary') != 'third-party filesystem library consumer fallback'):
+                    raise Unsupported('uncertified fixture directory map')
+                self.catalog_mapper.validate_catalog(index['catalog'])
+                for section in ('directories', 'probes', 'opens'):
+                    for value in index[section].values():
+                        self.bits(value)
+                mandatory = 0
+                for section in ('untrusted', 'opaque', 'native_guard'):
+                    mandatory |= self.bits(index[section])
+                if mandatory & ~self.bits(index['always_include']):
+                    raise Unsupported('missing fixture uncertainty guard')
+                for section in ('known_directories', 'known_files', 'symlinks'):
+                    if not isinstance(index[section], list) or not all(isinstance(key,str) for key in index[section]):
+                        raise Unsupported('invalid baseline directory paths')
+                self.directory_data = index
             operands = Path(artifact_dir) / 'operands.json.gz'
             if self.mode == 'fine' and operands.is_file():
                 with gzip.open(operands, 'rt', encoding='utf-8') as f:
                     index = json.load(f)
-                if index.get('complete') is not True or index['base'] != BASE or index['catalog'] != [t['id'] for t in self.tests]:
+                if index.get('complete') is not True or index['base'] != BASE:
                     raise Unsupported('operand map mismatch')
+                self.catalog_mapper.validate_catalog(index['catalog'])
                 for pairs in index['sites'].values():
                     if not pairs:
                         raise Unsupported('empty operand domain')
@@ -301,8 +395,9 @@ class Selector:
             if self.mode == 'fine' and domains.is_file():
                 with gzip.open(domains,'rt',encoding='utf-8') as f:
                     index=json.load(f)
-                if index['base'] != BASE or index['catalog'] != [t['id'] for t in self.tests]:
+                if index['base'] != BASE:
                     raise Unsupported('type-domain map mismatch')
+                self.catalog_mapper.validate_catalog(index['catalog'])
                 self.bits(index['always_include'])
                 if index['constructor_bypasses']:
                     raise Unsupported('unverified enum construction')
@@ -320,6 +415,8 @@ class Selector:
             self.error = str(exc)
 
     def bits(self, value):
+        if self.catalog_mapper is not None:
+            return self.catalog_mapper.bits(value)
         value = int(value, 16)
         if value < 0 or value & ~self.mask:
             raise Unsupported("out-of-catalog bits")
@@ -373,6 +470,17 @@ class Selector:
 
     def file_selection(self, change: Change, allow_operand_proof=True):
         path = change.path
+        if change.kind != 'modify':
+            if change.kind != 'add' or self.directory_data is None:
+                raise Unsupported('file creation/deletion requires discovery dependencies')
+            actual = (self.root / path).resolve()
+            if not actual.is_relative_to(self.root) or actual.exists():
+                raise Unsupported('added file conflicts with pinned source')
+            change.apply('')
+            consumers = addition_consumers(path, self.directory_data)
+            if consumers is None:
+                raise Unsupported('unmodeled file creation')
+            return self.bits(format(consumers,'x'))
         source = self.source(path)
         updated, edits = change.apply(source)
         readers = self.fixture_bits.get(path, 0)
@@ -390,7 +498,11 @@ class Selector:
                 cookie = COOKIE.match(line)
                 if cookie and cookie[1].lower().replace("_", "-") not in {"utf-8", "utf8"}:
                     raise Unsupported("non-UTF-8 source declaration")
-        mask = readers | self.observers
+        observers = self.observers
+        if self.metadata_tracked and local_bodies_only(source, updated):
+            observers = ((observers & ~self.metadata_tracked)
+                         | (self.metadata_origins.get(path, 0) & self.metadata_tracked))
+        mask = readers | observers
         if self.mode == "fine":
             compile(updated, path, "exec", dont_inherit=True)
             if (text_candidate(source.split('\n'), updated.split('\n'), edits)
@@ -404,6 +516,8 @@ class Selector:
                     return mask | self.bits(format(consumers, 'x')) | self.operand_always
             scopes = self.index(path)
             if any(scopes.owner(edit.old_start, edit.old_end) is None for edit in edits):
+                if computationally_equal(source, updated):
+                    return readers | self.observers
                 attributed, _ = self.lines(path)
                 expression = lambda_selection(source, updated, attributed)
                 if expression is not None:
@@ -411,18 +525,28 @@ class Selector:
                 owners = changed_classes(source, updated)
                 if owners and self.class_consumers is not None:
                     consumers = self.class_always
-                    module = path[:-3].replace('/', '.')
+                    module = path[:-3].replace('/', '.').removesuffix('.__init__')
                     for owner in owners:
                         key = module + ':' + owner
                         if key not in self.class_consumers:
                             raise Unsupported('no baseline consumers for changed class')
                         consumers |= self.class_consumers[key]
+                    fields = (changed_fields(source, updated) if self.field_data is not None
+                              and scalar_fields_only(source, updated) else None)
+                    if fields and (self.baseline_scalar_fields is None or any(
+                            f'{module}:{owner}:{name}' not in self.baseline_scalar_fields for owner,name in fields)):
+                        fields = None
                     result = subprocess.run(
                         [sys.executable, '-B', str(Path(__file__).with_name('importcheck.py')), str(self.root)],
-                        input=json.dumps({'path':path,'source':updated}), text=True,
+                        input=json.dumps({'path':path,'source':updated,'scalar_fields':sorted(fields) if fields else []}), text=True,
                         capture_output=True, timeout=8)
                     if result.returncode or result.stdout.splitlines()[-1:] != ['blast-import-ok']:
                         raise Unsupported('patched module initialization failed')
+                    if fields and result.stdout.splitlines()[-2:-1] == ['blast-scalar-ok']:
+                        selected = field_consumers(module, fields, self.field_data,
+                                                   self.baseline_class_consumers)
+                        if selected is not None:
+                            consumers = self.class_always | self.bits(format(selected,'x'))
                     if self.explain:
                         print(f'{path}: concrete consumers of {sorted(owners)}',file=sys.stderr)
                     return mask | consumers
@@ -430,7 +554,7 @@ class Selector:
                 if names:
                     consumers = setting_consumers(self.root, self.coverage, names, self.setting_reads)
                     if consumers is not None:
-                        return mask | consumers
+                        return mask | self.bits(format(consumers, 'x'))
         if self.explain and mask:
             print(f"{path}: {readers.bit_count()} source readers, "
                   f"{self.observers.bit_count()} metadata observers", file=sys.stderr)

@@ -6,6 +6,26 @@ from src.diff import Unsupported, parse_patch
 
 
 class DiffTests(unittest.TestCase):
+    def test_creation_and_deletion_validate_null_headers_and_entire_file(self):
+        add=('diff --git a/tests/fixtures/new.sql b/tests/fixtures/new.sql\n'
+             'new file mode 100644\nindex 0000000..abcdef1\n'
+             '--- /dev/null\n+++ b/tests/fixtures/new.sql\n@@ -0,0 +1 @@\n+SELECT 1;\n')
+        change=parse_patch(add)[0]
+        self.assertEqual(change.kind,'add')
+        self.assertEqual(change.apply('')[0],'SELECT 1;\n')
+        with self.assertRaises(Unsupported):
+            change.apply('already exists\n')
+        delete=('diff --git a/case b/case\ndeleted file mode 100644\n'
+                '--- a/case\n+++ /dev/null\n@@ -1 +0,0 @@\n-old\n')
+        change=parse_patch(delete)[0]
+        self.assertEqual(change.kind,'delete')
+        self.assertEqual(change.apply('old\n')[0],'')
+        with self.assertRaises(Unsupported):
+            change.apply('old\nleftover\n')
+        for invalid in [add.replace('100644','120000'),add.replace('--- /dev/null','--- a/tests/fixtures/new.sql')]:
+            with self.assertRaises(Unsupported):
+                parse_patch(invalid)
+
     def test_seeded_round_trip_without_checkout_writes(self):
         rng = random.Random(83)
         for _ in range(100):

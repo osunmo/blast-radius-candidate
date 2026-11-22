@@ -28,8 +28,11 @@ class Hunk:
 class Change:
     path: str
     hunks: list[Hunk]
+    kind: str = 'modify'
 
     def apply(self, source: str) -> tuple[str, list[Edit]]:
+        if self.kind == 'add' and source:
+            raise Unsupported('new file already exists')
         original = lf_lines(source)
         result = []
         edits = []
@@ -59,6 +62,8 @@ class Change:
         result.extend(original[cursor:])
         if not edits:
             raise Unsupported("no changed lines")
+        if self.kind == 'delete' and result:
+            raise Unsupported('deleted file has remaining content')
         return "".join(result), edits
 
 
@@ -94,16 +99,30 @@ def parse_patch(text: str) -> list[Change]:
     i = 0
     while i < len(lines):
         git_header = None
+        declared_kind = None
         if lines[i].startswith("diff --git "):
             git_header = lines[i].rstrip("\n")
             i += 1
+            if i < len(lines) and lines[i].startswith(('new file mode ', 'deleted file mode ')):
+                mode = lines[i].rstrip('\n')
+                if mode not in {'new file mode 100644','deleted file mode 100644'}:
+                    raise Unsupported('unsupported file mode')
+                declared_kind = 'add' if mode.startswith('new ') else 'delete'
+                i += 1
             if i < len(lines) and lines[i].startswith("index "):
                 i += 1
         if (i + 1 >= len(lines) or not lines[i].startswith("--- ") or
                 not lines[i + 1].startswith("+++ ")):
             raise Unsupported("unsupported diff metadata")
-        path = header_path(lines[i], "a")
-        if path != header_path(lines[i + 1], "b") or path in seen:
+        old_null = lines[i][4:].rstrip('\n').split('\t',1)[0] == '/dev/null'
+        new_null = lines[i+1][4:].rstrip('\n').split('\t',1)[0] == '/dev/null'
+        if old_null and new_null:
+            raise Unsupported('both paths are null')
+        kind = 'add' if old_null else 'delete' if new_null else 'modify'
+        if declared_kind is not None and declared_kind != kind:
+            raise Unsupported('inconsistent creation/deletion metadata')
+        path = header_path(lines[i+1], 'b') if old_null else header_path(lines[i], 'a')
+        if (not new_null and path != header_path(lines[i + 1], "b")) or path in seen:
             raise Unsupported("renamed or repeated file")
         if git_header is not None and git_header != f"diff --git a/{path} b/{path}":
             raise Unsupported("ambiguous git paths")
@@ -135,7 +154,7 @@ def parse_patch(text: str) -> list[Change]:
             hunks.append(Hunk(old, new, body))
         if not hunks:
             raise Unsupported("missing hunks")
-        changes.append(Change(path, hunks))
+        changes.append(Change(path, hunks, kind))
     if not changes:
         raise Unsupported("empty patch")
     return changes

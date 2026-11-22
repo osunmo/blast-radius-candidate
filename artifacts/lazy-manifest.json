@@ -1,0 +1,15 @@
+{
+  "base": "eb11aec4be8cb2122afe713a4816662c3f0fb2fa",
+  "catalog": 1620,
+  "parent_maps_sha256": {
+    "classes.json.gz": "f6171edceea003c14a77410dc2e7a8beb93fd32084ab56f1ff058ee0945429dc",
+    "coverage.json.gz": "59a6f80f1aa3ab2bf33f11bb072afbb0ba5b95d9390dbf0206e153b01416762d",
+    "operands.json.gz": "d084c3b1e4d0750b0fbcf2470f99d24641f8beeb87eed38feda2ba46f59fa982"
+  },
+  "producer": "refine_lazy-v2",
+  "report_sha256": "8a5b89b0cf7b035749fd3bed1ad7f1eb652852a06f8509a6591b2816b90bb4de",
+  "verified_groups": 1,
+  "verified_tests": [
+    "tests/dialects/test_dialect.py::TestDialect::test_lazy_load"
+  ]
+}

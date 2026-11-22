@@ -2,7 +2,7 @@
 
 A batch regression-test selector for the JoinBuilders challenge. The image reads `/data/tests.json` and `/data/commits/*.patch`, then emits one JSON work assignment per commit. It analyzes each patch against SQLGlot `eb11aec4be8cb2122afe713a4816662c3f0fb2fa`. All test execution used to construct the dependency map happens offline.
 
-The final constrained local median is **178.842418 seconds**, comprising 161.800 simulated seconds plus CPU. All three runs missed zero commits and covered 73/73 sample failures. Raw aggregate measurements are in [benchmarks/final.json](benchmarks/final.json). The competition server score remains unmeasured.
+The current sample result is **140.588 simulated seconds**, with zero missed commits and 73/73 failing instances covered. Constrained three-run measurements are recorded in [benchmarks/final.json](benchmarks/final.json); historical results and validation limits are in [EXPERIMENTS.md](EXPERIMENTS.md). Local sample results do not establish the hidden competition score.
 
 ## Run the candidate
 
@@ -33,6 +33,10 @@ The worker profiler distinguishes loader source opens from program source reads 
 2. At inference, the selector checks the pinned map and ordered catalog, validates hunk counts, coordinates and context, and reconstructs changed source in memory. It parses baseline and patched syntax and compiles changed Python. Supported class-setting edits are imported in a fresh interpreter using an in-memory loader, without writing source. A supported local edit can select tests associated with an old statement or enclosing function. Added statements use the enclosing scope. Fixture edits use observed readers when available.
 3. Discovery, ambiguous definitions, changes to initialization, invalid source, unsupported patch metadata and unknown dependencies can select the entire catalog. Every result includes tests flagged as opaque by the profiler. Dynamic selection depends on the behavior exercised on the baseline, including its Python version, data and execution order. A change to cached state or an unobserved external observer remains a source of miss risk.
 4. Scheduling uses the catalog's integer milliseconds. Longest jobs go first onto the lightest worker. The scheduler considers counts from one through eight, skipping a trial only if its lower bound cannot beat the best known cost. Schedules are cached by selected test set. `--refine` enables an experimental bounded pass of moves and swaps.
+
+Scalar setting changes can use certified per-attribute readers. Both the baseline class namespace and a fresh patched import must contain exact primitive values; enum members, descriptors, containers and factories retain class-level selection. Initialization, dictionary reflection, foreign subclasses and all 25 process contexts retain conservative guards. A verified cold-import subprocess replay replaces the former universal lazy-load test with its observed dependencies. Qualified code-metadata observers are narrowed only for unchanged bindings and ordinary function bodies; source readers remain included.
+
+Catalog masks are translated by stable test IDs, so numbering changes do not discard the dependency map and unknown tests remain included. Regular SQL fixture additions can use directory listings, file probes, failed opens and conservative native-library consumers. Source additions, file deletions and unsupported filesystem cases still widen to the full suite. Computational equivalence retains broad metadata and source observers even when generated code differs only in source positions.
 
 ## Rebuild the dependency map
 
