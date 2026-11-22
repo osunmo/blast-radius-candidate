@@ -1,0 +1,42 @@
+{
+  "runtime_source_commit": "796e448ba4862d17b9105b98717d1625d1118673",
+  "sample": {
+    "commits": 30,
+    "simulated_seconds": 140.588,
+    "selected_instances": 532,
+    "covered_failing_instances": 73,
+    "missed_commits": 0
+  },
+  "unit_tests": {
+    "passed_or_skipped": 117,
+    "skipped": 1
+  },
+  "independent_holdouts": {
+    "cases": 12,
+    "case_test_observations": 1339,
+    "observed_failing_instances": 67,
+    "misses": 0,
+    "added_fixture_cases": 2,
+    "added_fixture_scope_each": 29,
+    "added_fixture_observed_failures": 0
+  },
+  "stress": {
+    "patches": 45,
+    "selector_wall_seconds": 32.27,
+    "cpu_seconds": 30.754408,
+    "peak_bytes": 205152256,
+    "peak_pids": 6,
+    "stdout_bytes": 79892,
+    "ground_truth_collected": false
+  },
+  "limits": {
+    "cpus": 2,
+    "memory_gib": 4,
+    "pids": 256,
+    "uid": 65534,
+    "read_only_root": true,
+    "tmpfs_mib": 64,
+    "network": "none"
+  },
+  "hidden_server_score": "unmeasured"
+}

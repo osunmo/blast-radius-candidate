@@ -508,9 +508,7 @@ class Selector:
             if (text_candidate(source.split('\n'), updated.split('\n'), edits)
                     and ast.dump(ast.parse(source)) == ast.dump(ast.parse(updated))):
                 return mask
-            identity_edit = any(re.search(r'\bis\b',line)
-                                for edit in edits for line in source.split('\n')[edit.old_start:edit.old_end])
-            if self.operand_sites is not None and allow_operand_proof and identity_edit:
+            if self.operand_sites is not None and allow_operand_proof:
                 consumers = identity_consumers(source, updated, path, self.operand_sites, self.type_domains)
                 if consumers is not None:
                     if self.explain:

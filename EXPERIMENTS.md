@@ -65,7 +65,7 @@ Reproduce the final measurement with `python tools/benchmark.py --kit KIT_PATH -
 
 At that stage four sample patches still used the full-suite fallback. The next candidate below replaces those fallbacks with baseline class dependencies. Arbitrary initialization, dynamic reflection, native readers, shared-state effects and source-position observers outside baseline observations remain limitations.
 
-## Class and operand dependencies: final candidate
+## Previously published class and operand candidate
 
 Two additional independent class-setting mutations were checked against a fixed 181-test Windows scope. Its baseline passed 181 tests and 2837 subtests. The Snowflake TRY_CAST constraint mutation produced one failing test, which was selected; the TSQL typed-division mutation produced no failures in that scope. Both selected fewer than the full catalog (373 and 193 tests respectively). These checks do not establish recall outside that scope.
 
@@ -97,3 +97,47 @@ Peak memory was 122851328 bytes, peak PID count 6, and stdout 4167 bytes. The in
 Reproduce the final three runs with `python tools/benchmark.py --kit KIT_PATH --image blast-radius-next-local --mode fine --save ../results/class-final`. Rebuild the supplemental baseline artifacts using the pinned profiling image: run `build_classes.py` and `build_operands.py` in separate fresh containers, then `refine_classes.py` in another, adding static references with `refine_class_refs.py`. Merge the parent and verified-worker maps with `merge_consumers.py`, propagate initialization dependencies with `refine_class_links.py`, and generate `build_type_domains.py` in a fresh container. Each tool provides `--help`; mount the whole repository at `/submission` and the catalog separately. The final class/operand hashes and worker verification list are recorded in `artifacts/consumers-manifest.json`. Regenerate its hashes after class-link propagation. The enum-domain map reproduced byte for byte on Linux, with SHA-256 `e211ce047ae588b5857f3ceb4feac232d1fd286c4b4eef8cd3869f9e5bea76de`.
 
 These dependencies describe baseline behavior, not a general proof of hidden-set soundness. New reflective or native constructor bypasses, class metadata observers, dynamic callbacks and cache effects outside the measured baseline can invalidate an inferred dependency. Finite enum equivalence relies on canonical construction and stable builtin equality; known mutation contexts are retained, direct constructor bypasses disable the proof, and multi-file patches disable operand proofs. The isolated import check detects initialization failures but does not establish equivalence of every initialization side effect. Hidden-set recall and the competition server score remain unverified.
+
+## November 22 scalar, process and filesystem refinement
+
+The user reported 298.150 simulated seconds plus 3.53 seconds of CPU for the previous hidden-server candidate (301.7 rounded). The supplied sample reproduces 161.800 simulated seconds for that version. These are different evaluation observations; a local reduction cannot establish the new hidden score.
+
+Three parallel investigations covered field dependencies, expensive-test selection, and primary RTS literature. The implementation adopts finer attribute names and guarded initialization reasoning, with references in RESEARCH.md. Two costly TPCDS selections remain because omitting them would miss actual sample failures. Structural dispatch pruning and fresh-object copy elision were rejected without sufficient lookup/ownership evidence.
+
+| Stage | Simulated seconds | Missed commits | Disposition |
+| --- | ---: | ---: | --- |
+| Previous published candidate | 161.800 | 0 | Reference |
+| Verified cold child, metadata origins and portable catalogs | 144.783 | 0 | Accepted baseline |
+| Initial field map missing process contexts | 441.077 | 1 | Rejected; includes 300-second penalty |
+| Restore all worker contexts, broad field domain | 146.381 | 0 | Correct but unnecessarily broad |
+| Restrict finer selection to certified primitive fields | 140.588 | 0 | Final selection |
+
+The field profile passed 1620 tests and 25440 subtests in 741.27 seconds; the independent precise dictionary-reflection replay passed the same suite in 1467.13 seconds. The certified map has 26047 field keys and 6842 initialization guards. All 25 original process contexts are explicitly retained, rather than inferred solely from OS audit events. Fourteen contexts conservatively cover foreign subclasses. Per-test dictionary probes are not intersected away by coarser class masks. Class-wide fallback also incorporates directly observed fields and membership probes.
+
+Finer field selection applies only to existing scalar literals. A fresh baseline scan certifies 2568 primitive fields in their owning class namespace, and a fresh patched import checks the new namespace again. Enum members, descriptors, containers and factories retain the previous class selection. Scalar contracts bind to the exact field-map hash. The two optional test modules that could not import in the production dependency environment contribute no certified fields.
+
+The remaining cold-import subprocess was replayed with independent original and instrumented launches, successful exits, equal stdout/stderr, exact PID/nonce identity and no descendants. Its report records 10820 source lines and 1126 imported class guards. Only verified uncertainty bits are cleared; unrelated and untrusted bits remain. Qualified metadata readers record defining source files, and narrowing is limited to unchanged bindings and ordinary function bodies. Computational equivalence retains broad metadata and source-reader guards. Test IDs translate the baseline masks to reordered or reduced catalogs, and new test IDs remain included.
+
+The filesystem profile passed 1620 tests and 25440 subtests in 806.96 seconds. Its map records directory enumeration, stat/lstat/access/readlink probes, failed opens and mutation attempts, preserving 25 process contexts and 276 native-library consumers. Existing-parent metadata probes remain dependencies because adding a child can change directory timestamps and size. Only regular SQL fixture additions are supported; source additions and deletions remain full-suite fallbacks. Representative additions select 277 tests with scheduled cost 27.454 seconds, compared with 36.817 for the full catalog.
+
+Twelve independent frozen holdout mutations covered 67 observed failing instances with zero misses. Ten cases used fixed scopes of 50, 113 or 181 tests. Two fixture additions each passed all 29 tests and 1188 subtests in their preselected scope; they exercise unchanged behavior, not positive failure detection. No baseline fixture enumerator or missing SQL-file probe provided a positive added-file failure case. Synthetic tests cover positive directory consumers and parent metadata changes. All truth, patches and prediction logs remain outside the submission.
+
+The final runtime is measured from a clean checkout with the root pinned Dockerfile. See the final constrained table below and benchmarks/final.json. The hidden-server result for this revision remains unmeasured. Baseline dependency completeness, unobserved callbacks/native behavior and cache effects remain limitations; neither sample recall nor these bounded holdouts prove hidden-set soundness.
+
+### Final constrained measurement
+
+Runtime source commit `796e448ba4862d17b9105b98717d1625d1118673` was cloned locally without hardlinks and built with four-core/8 GB build settings. All runs used two cores, 4 GB, no network, nobody, read-only root, HOME=/tmp, 64 MB tmpfs and 256 PIDs. No SQLGlot test execution occurs during selection. The kit scorer was unchanged.
+
+| Run | Simulated seconds | Container CPU seconds | Local total seconds | Selector wall seconds |
+| --- | ---: | ---: | ---: | ---: |
+| 1 | 140.588 | 9.249844 | 149.837844 | 9.27 |
+| 2 | 140.588 | 9.806221 | 150.394221 | 9.81 |
+| 3 | 140.588 | 9.308198 | 149.896198 | 9.40 |
+
+The median is **149.896198 seconds (149.9 rounded)**, with zero missed commits in every run and 73/73 failing instances covered. Simulated seconds fell 13.1% from 161.800. The local median fell 16.2% from the previous 178.842418 measurement. These comparisons use the supplied sample, not the hidden server batch. Output was 3346 bytes; peak memory was 165249024 bytes and peak PID count 6. CPU includes the small measurement shell and precedes final container shutdown.
+
+The final source tree passed 117 unit tests with one platform-specific skip; the corresponding POSIX directory tests passed in Linux. The independent 45-patch stress batch passed schema checks in 32.27 selector seconds and 30.754408 container CPU seconds, with 205152256 peak bytes, 6 peak PIDs and 79892 output bytes. No failure truth was collected for that stress batch. An optional operand text prefilter produced identical sample output but a worse constrained median (156.663538); it was discarded. The delivered runtime source is byte-identical to the measured source commit above; later changes record reports and add a regression test.
+
+Reproduce using `docker build --platform linux/amd64 -t blast-radius-local .` followed by `python tools/benchmark.py --kit KIT_PATH --image blast-radius-local --mode fine --save ../results/final`. The submitted image uses committed baseline maps, so the lengthy offline profiles do not count toward build time.
+
+To regenerate the supplemental maps, start from freshly rebuilt coverage and worker evidence in a scratch directory, before clearing isolated-process uncertainty. `refine_lazy.py` collects the remaining isolated Python subprocess and `merge_lazy.py` merges only certified reports into a separate artifact copy. Run `build_fields.py` and `build_field_guards.py` in separate fresh profiling containers; then run `refine_fields.py --certify` with the precise guards, complete linked class map, foreign-receiver coverage and original worker manifest. Its CLI documents the required inputs. Run `build_scalar_contracts.py` in a fresh interpreter against the pinned production source and finalized field map. `build_metadata.py` profiles qualified observer tests; `build_directories.py` profiles the full catalog and preserves worker/native uncertainty. Keep `PYTHON_CPU_COUNT=2`, `SKIP_INTEGRATION=0` and the starter package lock in the profiling environment. Each tool supplies `--help`; no tool takes sample labels.

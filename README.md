@@ -2,7 +2,7 @@
 
 A batch regression-test selector for the JoinBuilders challenge. The image reads `/data/tests.json` and `/data/commits/*.patch`, then emits one JSON work assignment per commit. It analyzes each patch against SQLGlot `eb11aec4be8cb2122afe713a4816662c3f0fb2fa`. All test execution used to construct the dependency map happens offline.
 
-The current sample result is **140.588 simulated seconds**, with zero missed commits and 73/73 failing instances covered. Constrained three-run measurements are recorded in [benchmarks/final.json](benchmarks/final.json); historical results and validation limits are in [EXPERIMENTS.md](EXPERIMENTS.md). Local sample results do not establish the hidden competition score.
+The final local median is **149.9 seconds including CPU**, comprising **140.588 simulated seconds** with zero missed commits and 73/73 failing instances covered in all three runs. Measurements are in [benchmarks/final.json](benchmarks/final.json); methodology and limitations are in [EXPERIMENTS.md](EXPERIMENTS.md). The new hidden competition score remains unmeasured.
 
 ## Run the candidate
 
