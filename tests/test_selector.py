@@ -1,3 +1,4 @@
+import ast
 import difflib
 from contextlib import redirect_stderr, redirect_stdout
 import gzip
@@ -32,6 +33,20 @@ def diff(old, new, path=PATH, n=3):
 
 
 class SelectorTest(unittest.TestCase):
+    def test_identity_operator_proof_accepts_keyword_whitespace(self):
+        source='def f(value):\n    return value\tis\tNone\n'
+        self.put(PATH,source)
+        self.map['files'][PATH]={'lines':{'2':'1'},'global':[1]}
+        node=next(node for node in ast.walk(ast.parse(source)) if isinstance(node,ast.Compare))
+        key=f'{PATH}:{node.lineno}:{node.col_offset}:{node.end_lineno}:{node.end_col_offset}'
+        signature=json.dumps(['builtins.NoneType','builtins.NoneType',False,False,False,False])
+        data={'base':BASE,'catalog':self.map['catalog'],'complete':True,
+              'sites':{key:{signature:'1'}},'always_include':'0'}
+        with gzip.open(self.root/'operands.json.gz','wt',encoding='utf-8') as f:
+            json.dump(data,f)
+        self.assertEqual(self.selector('fine').select(diff(source,source.replace('\tis\t',' == '))),set())
+        self.assertEqual(self.selector('fine').select(diff(source,source.replace('\tis\t',' is not '))),{0})
+
     def test_added_sql_fixture_uses_directory_and_missing_path_consumers(self):
         directory={'version':1,'base':BASE,'catalog':self.map['catalog'],'complete':True,
             'known_directories':['.','tests','tests/fixtures'],'known_files':['tests/fixtures/case.sql'],
